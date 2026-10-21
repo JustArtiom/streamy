@@ -23,14 +23,15 @@ function themeColors() {
 
 /**
  * Windows/Linux: the native minimize/maximize/close buttons drawn on top of
- * our title bar, in our colors.
+ * our title bar, in our colors. 1px shorter than the bar, so they don't paint
+ * over its bottom border (the line under the title bar stays full width).
  */
 function titleBarOverlay() {
   const colors = themeColors();
   return {
     color: colors.background,
     symbolColor: colors.foreground,
-    height: TITLE_BAR_HEIGHT,
+    height: TITLE_BAR_HEIGHT - 1,
   };
 }
 
