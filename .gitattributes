@@ -1,0 +1,7 @@
+# Same line endings (LF) on every OS, so Windows checkouts pass the format
+# check and nobody's editor rewrites whole files.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary

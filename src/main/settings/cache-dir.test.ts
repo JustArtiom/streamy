@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CACHE_MARKER,
@@ -183,9 +183,16 @@ describe("prepareCacheDir", () => {
 });
 
 describe("isProtectedFolder", () => {
-  it.each([["/"], ["/Volumes/Backup"]])("protects %s (a drive)", (dir) => {
-    expect(isProtectedFolder(dir, [])).toBe(true);
+  it("protects a drive root", () => {
+    expect(isProtectedFolder(parse(root).root, [])).toBe(true);
   });
+
+  it.skipIf(process.platform !== "darwin")(
+    "protects an external drive on macOS",
+    () => {
+      expect(isProtectedFolder("/Volumes/Backup", [])).toBe(true);
+    },
+  );
 
   it("protects the user's own folders", () => {
     expect(

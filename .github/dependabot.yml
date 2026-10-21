@@ -1,0 +1,20 @@
+# Weekly pull requests that keep dependencies up to date. The workflow pins
+# actions to exact commits (safer), so this is also what updates those.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # One pull request for all minor/patch updates; majors come one by one.
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
