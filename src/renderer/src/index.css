@@ -1,0 +1,84 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "tailwindcss";
+
+/* Theme: follows the OS light/dark setting. */
+:root {
+  color-scheme: light dark;
+}
+
+/*
+ * Design tokens: light-dark(light value, dark value).
+ * Components only use these names (bg-background, text-muted-foreground,
+ * border-border, …), never raw colors. Changing the brand = editing this file.
+ * --background / --foreground are also in src/main/window.ts (window colors).
+ */
+:root {
+  --background: light-dark(#ffffff, #0a0a0a);
+  --foreground: light-dark(#0a0a0a, #ededed);
+  /* subtle surfaces (sidebar, table headers) and secondary text */
+  --muted: light-dark(#fafafa, #111111);
+  --muted-foreground: light-dark(#666666, #a1a1a1);
+  /* hover / selected backgrounds */
+  --accent: light-dark(#f2f2f2, #1f1f1f);
+  --border: light-dark(#ebebeb, #262626);
+  --input: light-dark(#dedede, #333333);
+  --primary: light-dark(#0a0a0a, #ededed);
+  --primary-hover: light-dark(#383838, #cccccc);
+  --primary-foreground: light-dark(#ffffff, #0a0a0a);
+
+  --success: light-dark(#16a34a, #22c55e);
+  --warning: light-dark(#d97706, #f59e0b);
+  --danger: light-dark(#dc2626, #f87171);
+  --info: light-dark(#2563eb, #60a5fa);
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+}
+
+/* Lets the user drag the window by this element (our title bar). */
+@utility drag-region {
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+/* Buttons inside a drag region must opt out, or they can't be clicked. */
+@utility no-drag-region {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/*
+ * Windows/Linux: keeps content out from under the native window buttons.
+ * The OS reports the free area through these env() values. Elsewhere they
+ * fall back to "the whole width".
+ */
+@utility window-controls-safe-area {
+  padding-left: env(titlebar-area-x, 0px);
+  padding-right: calc(
+    100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%)
+  );
+}
+
+@layer base {
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+}
