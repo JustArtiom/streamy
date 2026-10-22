@@ -1075,7 +1075,9 @@ describe("opening from saved metadata", () => {
 
     expect(fakeClient.get(infoHash).torrentId).toMatchObject({
       infoHash,
-      files: [{ path: "Clip/clip.mp4", length: 40_000 }],
+      // parse-torrent joins with the system's separator ("Clip\clip.mp4" on
+      // Windows); the engine turns it into "/" before anything else sees it.
+      files: [{ path: join("Clip", "clip.mp4"), length: 40_000 }],
     });
     unsubscribe();
     await torrentService.remove(infoHash, { forget: true });

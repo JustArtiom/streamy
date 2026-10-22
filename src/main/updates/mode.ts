@@ -1,4 +1,4 @@
-import { dirname, join, posix } from "node:path";
+import { dirname, isAbsolute, join, posix, relative } from "node:path";
 
 // Which kind of updates this copy of Streamy can have (PLAN §11, Phase 5):
 //
@@ -27,8 +27,11 @@ export function appImagePath(
 ): string | null {
   const { APPIMAGE: file, APPDIR: mount } = env;
   if (!file || !mount || !posix.isAbsolute(file)) return null;
-  const inside = mount.endsWith("/") ? mount : `${mount}/`;
-  return execPath.startsWith(inside) ? file : null;
+  // Asked of the path module rather than with "/": the same answer on
+  // Linux, and tests that pretend to be Linux work on Windows too.
+  const rel = relative(mount, execPath);
+  const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  return inside ? file : null;
 }
 
 /** Facts about this run that decide the mode. Injected, so tests can fake them. */

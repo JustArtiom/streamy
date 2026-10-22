@@ -22,3 +22,9 @@ updates:
       # Must match the Node.js inside Electron (Node 24), not the newest Node.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # typescript-eslint only supports TypeScript below 6.1, so newer ones
+      # can't install. Patch updates (6.0.x) still come. Drop this once
+      # typescript-eslint supports the next TypeScript.
+      - dependency-name: "typescript"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor"]

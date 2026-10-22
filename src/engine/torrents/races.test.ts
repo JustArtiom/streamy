@@ -41,10 +41,16 @@ import {
 
 const gates = vi.hoisted(() => ({
   /** Holds deleteTorrentData (the disk work of a delete). */
-  delete: null as Promise<void> | null,
+  delete: null as Gate | null,
   /** Holds ensureVideoFolder (the first disk work of an add). */
-  folder: null as Promise<void> | null,
+  folder: null as Gate | null,
 }));
+
+/** A held step: it calls `entered`, then waits for `promise`. */
+interface Gate {
+  promise: Promise<void>;
+  entered: () => void;
+}
 
 vi.mock("./client", async () => {
   const { fakeClient } = await import("../test/fake-torrent-client");
@@ -60,7 +66,11 @@ vi.mock("../cache/clean", async (importOriginal) => {
   return {
     ...actual,
     deleteTorrentData: async (cacheDir: string, infoHash: string) => {
-      if (gates.delete) await gates.delete;
+      const held = gates.delete;
+      if (held) {
+        held.entered();
+        await held.promise;
+      }
       return actual.deleteTorrentData(cacheDir, infoHash);
     },
   };
@@ -71,7 +81,11 @@ vi.mock("../lib/video-folder", async (importOriginal) => {
   return {
     ...actual,
     ensureVideoFolder: async (cacheDir?: string) => {
-      if (gates.folder) await gates.folder;
+      const held = gates.folder;
+      if (held) {
+        held.entered();
+        await held.promise;
+      }
       return actual.ensureVideoFolder(cacheDir);
     },
   };
@@ -103,13 +117,22 @@ afterEach(async () => {
   fakeClient.torrents = [];
 });
 
-/** A gate the test opens by hand. */
+/**
+ * A gate the test opens by hand. `reached` resolves once the held step has
+ * started. Wait for that, not for a number of event-loop turns: real disk
+ * work before the step takes longer on slow machines (CI).
+ */
 function gate() {
-  const { promise, resolve } = Promise.withResolvers<undefined>();
+  const opened = Promise.withResolvers<undefined>();
+  const entered = Promise.withResolvers<undefined>();
   return {
-    promise: promise.then(() => undefined),
+    promise: opened.promise.then(() => undefined),
+    entered: () => {
+      entered.resolve(undefined);
+    },
+    reached: entered.promise,
     open: () => {
-      resolve(undefined);
+      opened.resolve(undefined);
     },
   };
 }
@@ -190,10 +213,10 @@ describe("a delete while an open is still going", () => {
   it("waits for the open, then deletes what it opened", async () => {
     await storeOnDisk();
     const folder = gate();
-    gates.folder = folder.promise;
+    gates.folder = folder;
 
     const opening = torrentService.add({ torrentFile: TORRENT });
-    await settle();
+    await folder.reached;
     const removing = torrentService.remove(HASH);
     folder.open();
     await opening;
@@ -237,10 +260,10 @@ describe("eviction and opening the same torrent", () => {
   it("an eviction already deleting: the open waits, then starts fresh", async () => {
     await storeOnDisk();
     const deleting = gate();
-    gates.delete = deleting.promise;
+    gates.delete = deleting;
 
     const run = evictEverything().run();
-    await settle(); // it measured, and its deletion is queued (held)
+    await deleting.reached; // it measured, and its deletion is held
     const opening = torrentService.add({ torrentFile: TORRENT });
     await settle();
     expect(fakeClient.torrents).toHaveLength(0); // waiting for the delete
@@ -257,10 +280,10 @@ describe("eviction and opening the same torrent", () => {
   it("an open already going: the eviction leaves it alone", async () => {
     await storeOnDisk();
     const folder = gate();
-    gates.folder = folder.promise;
+    gates.folder = folder;
 
     const opening = torrentService.add({ torrentFile: TORRENT });
-    await settle();
+    await folder.reached;
     const run = await evictEverything().run();
     folder.open();
     await opening;
@@ -288,7 +311,7 @@ describe('"Clear now" and an open that started just before', () => {
       stopBackgroundDownload: () => undefined,
     });
     const folder = gate();
-    gates.folder = folder.promise;
+    gates.folder = folder;
     const opening = torrentService.add(
       { torrentFile: TORRENT },
       {
@@ -303,7 +326,7 @@ describe('"Clear now" and an open that started just before', () => {
       () => null,
       (err: unknown) => err,
     );
-    await settle();
+    await folder.reached;
 
     await policy.clear(async () => {
       // The open gets past the folder check while the clear runs.
