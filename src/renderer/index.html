@@ -2,10 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Only our own files may load: no remote scripts, ever. -->
+    <!--
+      Only our own files may load: no remote scripts, ever.
+      app://streamy is the engine API (app://streamy/api): the same origin in
+      the installed app, but not in dev, where the page comes from Vite.
+      blob: is for hls.js (MediaSource video, and its Web Worker).
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: app://streamy; font-src 'self' data:; media-src 'self' blob: app://streamy; connect-src 'self' app://streamy; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>Streamy</title>
   </head>

@@ -149,6 +149,29 @@ export function StorageSection({ snapshot }: { snapshot: SettingsSnapshot }) {
             )}
           </div>
 
+          {snapshot.previousCacheDir && (
+            <div className="flex flex-col items-start gap-2 rounded-md border border-border px-3 py-2.5 text-sm">
+              <p className="text-muted-foreground">
+                Videos already downloaded stay in the old folder:{" "}
+                <PathText
+                  path={snapshot.previousCacheDir}
+                  className="text-xs text-foreground"
+                />
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  run(() => settingsApi.showPreviousCacheDir());
+                }}
+              >
+                <FolderOpen />
+                Show old folder
+              </Button>
+            </div>
+          )}
+
           {error && (
             <p role="alert" className="text-sm text-danger">
               {error}
@@ -185,7 +208,7 @@ export function StorageSection({ snapshot }: { snapshot: SettingsSnapshot }) {
 
       <SettingRow
         title="Size limit"
-        description="When videos take more space than this, Streamy deletes the ones you watched longest ago."
+        description="When videos take more space than this, or your disk is almost full, Streamy deletes the ones you watched longest ago."
       >
         {({ titleId, descriptionId }) => (
           <Select

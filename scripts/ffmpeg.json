@@ -1,0 +1,103 @@
+{
+  "$comment": "The ffmpeg build Streamy ships. Read by scripts/fetch-ffmpeg.mjs; see its header for how to update. sha256 = GitHub-published asset digest; files = paths inside the archive; binarySha256 = SHA-256 of each file once extracted (checked after extracting, and every time before using what's in vendor/ffmpeg).",
+  "name": "jellyfin-ffmpeg",
+  "version": "8.1.3-1",
+  "ffmpegVersion": "8.1.3",
+  "tag": "v8.1.3-1",
+  "commit": "253db2a7b0a8045c54ce68ce33d7f601229b1822",
+  "license": "GPL-3.0-or-later",
+  "releaseUrl": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/tag/v8.1.3-1",
+  "sourceUrl": "https://github.com/jellyfin/jellyfin-ffmpeg/archive/refs/tags/v8.1.3-1.tar.gz",
+  "builds": {
+    "darwin-arm64": {
+      "asset": "jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz",
+      "url": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz",
+      "sha256": "22445d7299742749ad2eeb9ce87963d50def0357e45b3e6c7b69987c8365dbf6",
+      "size": 32902204,
+      "archive": "tar.xz",
+      "files": {
+        "ffmpeg": "ffmpeg",
+        "ffprobe": "ffprobe"
+      },
+      "binarySha256": {
+        "ffmpeg": "f043b55df439a90743faf539ce88b723c84eb8baa0ae3323a894c87b459b85ef",
+        "ffprobe": "6e5f60f7387917b33e3c4dfdf1e2d13cc63a1e928c0ac75c4f0dcd89f1c2a90d"
+      }
+    },
+    "darwin-x64": {
+      "asset": "jellyfin-ffmpeg_8.1.3-1_portable_mac64-gpl.tar.xz",
+      "url": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_mac64-gpl.tar.xz",
+      "sha256": "cb2b5c154d49a6b6bfe29fa6c16510e85dcbf60b805764121a167b093d4bb6fb",
+      "size": 37952072,
+      "archive": "tar.xz",
+      "files": {
+        "ffmpeg": "ffmpeg",
+        "ffprobe": "ffprobe"
+      },
+      "binarySha256": {
+        "ffmpeg": "7fac408456170601ca9a68457e783e954ca87f434ae5c36f8103b599df06ed90",
+        "ffprobe": "3dad8cc782c394f3551ea563673714232464a2010949d6ee7d35abd52b6d778b"
+      }
+    },
+    "win32-x64": {
+      "asset": "jellyfin-ffmpeg_8.1.3-1_portable_win64-clang-gpl.zip",
+      "url": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_win64-clang-gpl.zip",
+      "sha256": "3691f8b2d4c39c511b5faff1c8c4687bd782dac823e63ba69f0755f7ce1af9ce",
+      "size": 68034152,
+      "archive": "zip",
+      "files": {
+        "ffmpeg": "ffmpeg.exe",
+        "ffprobe": "ffprobe.exe"
+      },
+      "binarySha256": {
+        "ffmpeg": "47495334f74912826bc474d246fe69fb4c01cd0d3c612d24b6a06000fe4c1483",
+        "ffprobe": "673949ee5d0406529863232eb1053517a3b518e669fe600a45a3e7a638b22fec"
+      }
+    },
+    "win32-arm64": {
+      "asset": "jellyfin-ffmpeg_8.1.3-1_portable_winarm64-clang-gpl.zip",
+      "url": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_winarm64-clang-gpl.zip",
+      "sha256": "4118c7046bf3410e342b6cf583ccdae01b940df3c2b3e3f7d329d34569da3283",
+      "size": 55719055,
+      "archive": "zip",
+      "files": {
+        "ffmpeg": "ffmpeg.exe",
+        "ffprobe": "ffprobe.exe"
+      },
+      "binarySha256": {
+        "ffmpeg": "90dc4d9241fedf41c33af7ce63d568f5f54b4f204b5e084f76b9324e22e68ccb",
+        "ffprobe": "23fd651d7b9a1e547465cd86f2e18c50957974a9266f06fe5f1fdff53a870137"
+      }
+    },
+    "linux-x64": {
+      "asset": "jellyfin-ffmpeg_8.1.3-1_portable_linux64-gpl.tar.xz",
+      "url": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_linux64-gpl.tar.xz",
+      "sha256": "b86dc023c64a5a9a410e6e3a938a970460214fae78f31c1553c9f88f1c289b6a",
+      "size": 60368340,
+      "archive": "tar.xz",
+      "files": {
+        "ffmpeg": "ffmpeg",
+        "ffprobe": "ffprobe"
+      },
+      "binarySha256": {
+        "ffmpeg": "79a8d05b3d26859cc5267966a5c7b711f28104c8fd4fa53db8b89e9db00106b5",
+        "ffprobe": "7b379df65bcf973ac0243c1f6b2293c850023f027aee4ec5441fde76c8db30c8"
+      }
+    },
+    "linux-arm64": {
+      "asset": "jellyfin-ffmpeg_8.1.3-1_portable_linuxarm64-gpl.tar.xz",
+      "url": "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_linuxarm64-gpl.tar.xz",
+      "sha256": "7bc8e8d0986f7f4693f63e9728570f671f07b6e21c05d5465dd7ce461d1631dc",
+      "size": 54137808,
+      "archive": "tar.xz",
+      "files": {
+        "ffmpeg": "ffmpeg",
+        "ffprobe": "ffprobe"
+      },
+      "binarySha256": {
+        "ffmpeg": "1bc789bf624cbe8c3728a7653048d6b39fd098b4503c9abd040dbef7f952a370",
+        "ffprobe": "71b5645072504cf1ff0b808036cb48c259359c8601383b2d3553c4401db9f525"
+      }
+    }
+  }
+}

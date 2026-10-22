@@ -15,7 +15,9 @@ import {
   type SettingsSnapshot,
   UI_SCALES,
 } from "../../shared/settings";
+import type { CacheEngine } from "../engine/client";
 import { handleTrusted } from "../ipc";
+import { setInterfaceScale } from "../window";
 import {
   CacheDirError,
   cacheUsage,
@@ -33,6 +35,11 @@ interface SettingsOptions {
   protectedDirs: string[];
   /** The app's data folder (where settings.json lives). */
   dataDir: string;
+  /**
+   * The playback engine, which owns the video folder's contents. Without
+   * it (tests), Storage measures and clears the folder itself.
+   */
+  engine?: CacheEngine;
 }
 
 export interface SettingsController {
@@ -43,6 +50,8 @@ export interface SettingsController {
 
 const FOLDER_UNAVAILABLE =
   "The video folder isn't available. If it's on an external drive, connect it and try again.";
+const OLD_FOLDER_UNAVAILABLE =
+  "The old video folder isn't available. If it's on an external drive, connect it and try again.";
 
 /**
  * Applies the settings, and lets the UI read and change them over IPC.
@@ -53,13 +62,20 @@ export function setupSettings({
   defaultCacheDir,
   protectedDirs,
   dataDir,
+  engine,
 }: SettingsOptions): SettingsController {
+  const cacheDir = () => store.get().cacheDir ?? defaultCacheDir;
+  // Videos aren't moved when the folder changes. For the rest of this run,
+  // Settings says so and can show the folder they stayed in.
+  let currentCacheDir = cacheDir();
+  let previousCacheDir: string | null = null;
+
   const snapshot = (): SettingsSnapshot => ({
     settings: store.get(),
     defaultCacheDir,
     hardwareAccelerationActive: app.isHardwareAccelerationEnabled(),
+    previousCacheDir,
   });
-  const cacheDir = () => store.get().cacheDir ?? defaultCacheDir;
   /** A chosen folder that's gone (e.g. on an unplugged drive). */
   const chosenFolderMissing = () =>
     store.get().cacheDir !== null && !existsSync(cacheDir());
@@ -68,10 +84,14 @@ export function setupSettings({
   // createMainWindow.) The theme also sets prefers-color-scheme in the UI.
   nativeTheme.themeSource = store.get().theme;
   store.onChange((settings) => {
+    if (cacheDir() !== currentCacheDir) {
+      previousCacheDir = currentCacheDir;
+      currentCacheDir = cacheDir();
+    }
     nativeTheme.themeSource = settings.theme;
     const next = snapshot();
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.setZoomFactor(settings.uiScale);
+      setInterfaceScale(window, settings.uiScale);
       window.webContents.send(IpcChannel.SettingsChanged, next);
     }
   });
@@ -148,8 +168,23 @@ export function setupSettings({
     return { status: "ok" };
   });
 
+  handleTrusted(IpcChannel.ShowPreviousCacheDir, (): ActionResult => {
+    // Only ever the folder this run really used before: never a path from
+    // the page.
+    if (previousCacheDir === null) {
+      return { status: "error", message: "The video folder hasn't changed." };
+    }
+    if (!existsSync(previousCacheDir)) {
+      return { status: "error", message: OLD_FOLDER_UNAVAILABLE };
+    }
+    shell.showItemInFolder(previousCacheDir);
+    return { status: "ok" };
+  });
+
   handleTrusted(IpcChannel.GetCacheUsage, async (): Promise<CacheUsage> => {
-    const usage = await cacheUsage(cacheDir());
+    // The engine measures while it runs; this is only the fallback.
+    const usage =
+      (await engine?.usage(cacheDir())) ?? (await cacheUsage(cacheDir()));
     // The default folder just hasn't been created yet: nothing used.
     return usage.status === "missing" && store.get().cacheDir === null
       ? { status: "ok", bytes: 0 }
@@ -160,6 +195,9 @@ export function setupSettings({
     if (chosenFolderMissing()) {
       return { status: "error", message: FOLDER_UNAVAILABLE };
     }
+    // The engine is the only writer of the video folder: it stops its
+    // torrents before deleting their files.
+    if (engine) return engine.clear();
     try {
       await clearCache(cacheDir());
       return { status: "ok" };

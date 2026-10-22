@@ -2,7 +2,10 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { lstat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { CacheUsage } from "../../shared/settings";
+import { CACHE_CONTENT_DIRS, CACHE_MARKER } from "../../shared/video-folder";
 import { isErrnoCode } from "../storage/json-file";
+
+export { CACHE_CONTENT_DIRS, CACHE_MARKER };
 
 // Where videos are kept while watching. They can always be downloaded again,
 // so by default they go in the OS cache folder: it isn't synced to the cloud
@@ -15,14 +18,9 @@ import { isErrnoCode } from "../storage/json-file";
 //   already Streamy's. Otherwise (and always for Downloads, Desktop, a drive
 //   root…) it makes a "Streamy" folder inside it.
 
-/** Marks a folder as Streamy's video folder. */
-export const CACHE_MARKER = ".streamy-cache";
 const MARKER_TEXT =
   "Streamy keeps the videos you watch in this folder.\n" +
   "It only ever deletes what it downloaded itself (the torrents, playback and subtitles folders).\n";
-
-/** The only folders Streamy writes into. Clearing the cache deletes these. */
-export const CACHE_CONTENT_DIRS = ["torrents", "playback", "subtitles"];
 
 /** Made inside a chosen folder that Streamy shouldn't take over. */
 export const CACHE_SUBFOLDER = "Streamy";

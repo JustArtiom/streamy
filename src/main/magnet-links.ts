@@ -1,5 +1,7 @@
 import { app, type WebContents } from "electron";
 import { IpcChannel } from "../shared/api";
+import { MAX_MAGNET_LENGTH } from "../shared/engine-api";
+import { sendWhenLoaded } from "./ui-messages";
 
 // Magnet links opened with Streamy (clicked in a browser, or from another
 // app). They arrive in different ways:
@@ -7,11 +9,8 @@ import { IpcChannel } from "../shared/api";
 // - Windows/Linux: as a command line argument, either of this launch or of a
 //   second launch that the single-instance lock forwards to us.
 
-/** Longest link we accept (real ones are far shorter; this is a sanity cap). */
-const MAX_LENGTH = 16_384;
-
 export function isMagnetLink(value: string): boolean {
-  return value.length <= MAX_LENGTH && /^magnet:\?/i.test(value);
+  return value.length <= MAX_MAGNET_LENGTH && /^magnet:\?/i.test(value);
 }
 
 /** Finds a magnet link among command line arguments. */
@@ -38,12 +37,7 @@ export function receiveMagnetLinks({ showWindow }: MagnetLinkOptions): {
   let started = false;
 
   const deliver = (link: string) => {
-    const contents = showWindow();
-    const send = () => {
-      contents.send(IpcChannel.MagnetLinkOpened, link);
-    };
-    if (contents.isLoading()) contents.once("did-finish-load", send);
-    else send();
+    sendWhenLoaded(showWindow(), IpcChannel.MagnetLinkOpened, link);
   };
 
   const receive = (link: string) => {

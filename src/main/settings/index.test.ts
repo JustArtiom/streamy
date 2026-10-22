@@ -10,7 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IpcChannel } from "../../shared/api";
-import type { SettingsSnapshot } from "../../shared/settings";
+import type {
+  ActionResult,
+  CacheUsage,
+  SettingsSnapshot,
+} from "../../shared/settings";
+import type { CacheEngine } from "../engine/client";
 import {
   createFakeWindow,
   electron,
@@ -78,6 +83,17 @@ describe("reading and changing settings", () => {
 
     expect(electron.nativeTheme.themeSource).toBe("dark");
     expect(window.webContents.setZoomFactor).toHaveBeenCalledWith(1.25);
+    // The native window buttons follow the title bar's new height (55 px).
+    if (process.platform === "darwin") {
+      expect(window.setWindowButtonPosition).toHaveBeenCalledWith({
+        x: 16,
+        y: 20,
+      });
+    } else {
+      expect(window.setTitleBarOverlay).toHaveBeenCalledWith(
+        expect.objectContaining({ height: 54 }),
+      );
+    }
     const [channel, sent] = window.webContents.send.mock.calls[0] ?? [];
     expect(channel).toBe(IpcChannel.SettingsChanged);
     expect((sent as SettingsSnapshot).settings).toMatchObject({
@@ -222,5 +238,114 @@ describe("the video folder's contents", () => {
 
     expect(await invoke(IpcChannel.ClearCache)).toEqual({ status: "ok" });
     expect(readdirSync(defaultCacheDir)).toEqual([CACHE_MARKER]);
+  });
+});
+
+describe("after changing the video folder", () => {
+  it("remembers the old folder for this run, and can show it", async () => {
+    const before = (await invoke(IpcChannel.GetSettings)) as SettingsSnapshot;
+    expect(before.previousCacheDir).toBeNull();
+    expect(await invoke(IpcChannel.ShowPreviousCacheDir)).toMatchObject({
+      status: "error",
+    });
+
+    await invoke(IpcChannel.ShowCacheDir); // creates the default folder
+    const chosen = join(root, "Videos");
+    pickFolder(chosen);
+    await invoke(IpcChannel.ChooseCacheDir);
+
+    const after = (await invoke(IpcChannel.GetSettings)) as SettingsSnapshot;
+    expect(after.previousCacheDir).toBe(defaultCacheDir);
+    expect(await invoke(IpcChannel.ShowPreviousCacheDir)).toEqual({
+      status: "ok",
+    });
+    expect(electron.shell.showItemInFolder).toHaveBeenLastCalledWith(
+      defaultCacheDir,
+    );
+  });
+
+  it("tells the windows about the old folder with the change", async () => {
+    const window = createFakeWindow();
+    windows.push(window);
+    pickFolder(join(root, "Videos"));
+
+    await invoke(IpcChannel.ChooseCacheDir);
+
+    const [, sent] = window.webContents.send.mock.calls.at(-1) ?? [];
+    expect((sent as SettingsSnapshot).previousCacheDir).toBe(defaultCacheDir);
+  });
+
+  it("doesn't count changes to other settings", async () => {
+    await invoke(IpcChannel.UpdateSettings, { theme: "dark" });
+
+    const snapshot = (await invoke(IpcChannel.GetSettings)) as SettingsSnapshot;
+    expect(snapshot.previousCacheDir).toBeNull();
+  });
+
+  it("says so when the old folder is gone", async () => {
+    const gone = join(root, "Unplugged", "Streamy");
+    store.update({ cacheDir: gone });
+    store.update({ cacheDir: null });
+
+    expect(await invoke(IpcChannel.ShowPreviousCacheDir)).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("isn't available") as unknown,
+    });
+    expect(electron.shell.showItemInFolder).not.toHaveBeenCalled();
+  });
+});
+
+describe("with the playback engine", () => {
+  function withEngine(engine: CacheEngine) {
+    resetFakeElectron();
+    setupSettings({
+      store,
+      defaultCacheDir,
+      protectedDirs: [downloads],
+      dataDir: root,
+      engine,
+    });
+  }
+
+  it("asks the engine for the space used", async () => {
+    const usage = vi.fn(() =>
+      Promise.resolve<CacheUsage>({ status: "ok", bytes: 42 }),
+    );
+    withEngine({ usage, clear: vi.fn() });
+
+    expect(await invoke(IpcChannel.GetCacheUsage)).toEqual({
+      status: "ok",
+      bytes: 42,
+    });
+    expect(usage).toHaveBeenCalledWith(defaultCacheDir);
+  });
+
+  it("measures the folder itself when the engine can't tell", async () => {
+    withEngine({ usage: () => Promise.resolve(null), clear: vi.fn() });
+
+    expect(await invoke(IpcChannel.GetCacheUsage)).toEqual({
+      status: "ok",
+      bytes: 0,
+    });
+  });
+
+  it("lets the engine clear the videos", async () => {
+    const clear = vi.fn(() =>
+      Promise.resolve<ActionResult>({
+        status: "error",
+        message: "The playback engine isn't running. Try again in a moment.",
+      }),
+    );
+    withEngine({ usage: () => Promise.resolve(null), clear });
+    await invoke(IpcChannel.ShowCacheDir);
+    mkdirSync(join(defaultCacheDir, "torrents", "abc"), { recursive: true });
+
+    expect(await invoke(IpcChannel.ClearCache)).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("isn't running") as unknown,
+    });
+    expect(clear).toHaveBeenCalledOnce();
+    // Nothing deleted behind the engine's back.
+    expect(existsSync(join(defaultCacheDir, "torrents", "abc"))).toBe(true);
   });
 });

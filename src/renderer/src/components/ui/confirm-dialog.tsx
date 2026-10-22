@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogTitle } from "@/components/ui/dialog";
 
 /**
  * "Are you sure?" for an action that can't be undone. When the action fails,
@@ -17,21 +17,33 @@ export function ConfirmDialog({
   onClose,
 }: {
   open: boolean;
-  title: string;
+  /** Put a torrent's name in <bdi>, so a right-to-left one stays whole. */
+  title: ReactNode;
   description: ReactNode;
   confirmLabel: string;
-  /** While the action runs: buttons are disabled. */
+  /**
+   * While the action runs: the buttons are disabled, and Esc or a click
+   * outside doesn't close it (its result would be lost).
+   */
   busy?: boolean;
   /** Why the last attempt failed. */
   error?: string | null;
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const titleId = useId();
+
   return (
-    <Dialog open={open} onClose={onClose} size="sm" aria-label={title}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      dismissible={!busy}
+      size="sm"
+      aria-labelledby={titleId}
+    >
       <div className="flex flex-col gap-5 p-6">
         <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <DialogTitle id={titleId}>{title}</DialogTitle>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
 
@@ -45,7 +57,7 @@ export function ConfirmDialog({
           <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="danger" disabled={busy} onClick={onConfirm}>
+          <Button variant="danger" loading={busy} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { SettingsSnapshot } from "../../../shared/settings";
+import { peopleText, SOMETHING_WENT_WRONG } from "@/lib/people-text";
 
 // The UI's view of the settings. The main process owns them; this keeps a
 // copy that updates whenever they change (from this window or anywhere else).
@@ -26,6 +27,8 @@ function createStore<T>(initial: T) {
 
 const settingsStore = createStore<SettingsSnapshot | null>(null);
 const dialogStore = createStore(false);
+/** The section the dialog shows (null = the first one). Kept while closed. */
+const sectionStore = createStore<string | null>(null);
 
 // Start listening right away (before React renders), so nothing is missed.
 window.streamy.settings.onChange(settingsStore.set);
@@ -53,18 +56,19 @@ export const systemApi = window.streamy.system;
 /**
  * Runs a settings action and turns any failure into a message for the user
  * (or null when it worked). Actions that can fail in an expected way return
- * `{ status: "error", message }` (ActionResult, ChooseCacheDirResult).
+ * `{ status: "error", message }` (ActionResult, ChooseCacheDirResult). That
+ * message comes from the main process, so it goes through peopleText too.
  */
 export async function runAction(
   action: () => Promise<unknown>,
 ): Promise<string | null> {
   try {
     const result = await action();
-    if (isErrorResult(result)) return result.message;
+    if (isErrorResult(result)) return peopleText(result.message);
     return null;
   } catch (error) {
     console.error(error);
-    return "Something went wrong. Please try again.";
+    return SOMETHING_WENT_WRONG;
   }
 }
 
@@ -83,10 +87,24 @@ export function useSettingsDialogOpen(): boolean {
   return useSyncExternalStore(dialogStore.subscribe, dialogStore.get);
 }
 
-export function openSettings(): void {
+/**
+ * Opens the dialog on a given section (e.g. "storage"), or on the one it
+ * showed last.
+ */
+export function openSettings(section?: string): void {
+  if (section) sectionStore.set(section);
   dialogStore.set(true);
 }
 
 export function closeSettings(): void {
   dialogStore.set(false);
+}
+
+/** The id of the section the dialog shows, or null for the first one. */
+export function useSettingsSection(): string | null {
+  return useSyncExternalStore(sectionStore.subscribe, sectionStore.get);
+}
+
+export function showSettingsSection(section: string): void {
+  sectionStore.set(section);
 }

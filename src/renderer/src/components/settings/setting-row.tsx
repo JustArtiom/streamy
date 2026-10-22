@@ -28,10 +28,13 @@ export function SettingRow({
         // Divider above each row except the first (the last child of a
         // section may be something else, like a confirm dialog).
         "flex gap-x-6 gap-y-3 border-t border-border py-4 first:border-t-0 first:pt-0",
-        stacked ? "flex-col" : "items-center justify-between",
+        // Side by side when there's room. In a small window (or at a big
+        // interface size) the control wraps under the text instead of
+        // squeezing it into a sliver.
+        stacked ? "flex-col" : "flex-wrap items-center justify-between",
       )}
     >
-      <div className="min-w-0">
+      <div className={cn("min-w-0", !stacked && "min-w-48 flex-1")}>
         <p id={ids.titleId} className="text-sm font-medium">
           {title}
         </p>

@@ -1,9 +1,10 @@
 import { Settings } from "lucide-react";
-import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { TITLE_BAR_HEIGHT } from "../../../shared/api";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { useWindowFullScreen } from "@/lib/full-screen";
 import { isMac } from "@/lib/platform";
 import { openSettings } from "@/lib/settings";
 
@@ -13,9 +14,13 @@ import { openSettings } from "@/lib/settings";
  * - Windows/Linux: minimize/maximize/close are drawn over the right side.
  * The whole bar drags the window; buttons opt out with no-drag-region.
  */
-export function TitleBar() {
-  const [fullScreen, setFullScreen] = useState(false);
-  useEffect(() => window.streamy.onFullScreenChange(setFullScreen), []);
+export function TitleBar({
+  navigation,
+}: {
+  /** Shown after the logo, e.g. the Back button. Mark it no-drag-region. */
+  navigation?: ReactNode;
+}) {
+  const fullScreen = useWindowFullScreen();
 
   return (
     <header
@@ -35,6 +40,9 @@ export function TitleBar() {
           <span className="truncate text-[13px] font-semibold tracking-tight">
             Streamy
           </span>
+          {navigation && (
+            <div className="ml-1 flex items-center gap-1">{navigation}</div>
+          )}
         </div>
 
         <Button
@@ -43,7 +51,9 @@ export function TitleBar() {
           aria-label="Settings"
           title="Settings"
           className="no-drag-region"
-          onClick={openSettings}
+          onClick={() => {
+            openSettings();
+          }}
         >
           <Settings />
         </Button>

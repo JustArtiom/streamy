@@ -15,6 +15,13 @@ concurrency:
 permissions:
   contents: read
 
+# Installing: `npm ci --ignore-scripts` runs no package's install script
+# (that also skips downloading the Electron app: CI never runs it unpackaged,
+# and electron-builder downloads its own copy to package). Where the engine
+# runs (tests, packaged app), `npm rebuild node-datachannel` then runs the one
+# script it needs: fetching the WebRTC add-on's prebuilt binary. The other
+# native add-ons (utp-native, bufferutil, utf-8-validate) ship theirs.
+
 jobs:
   check:
     name: Types, lint, format
@@ -25,12 +32,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      # --ignore-scripts skips downloading the Electron app itself: nothing in
-      # CI runs it (electron-builder downloads its own copy to package).
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
+      # Every licence inside the app must be known to be fine. A new
+      # dependency with an unknown one fails here (see scripts/notices.mjs).
+      - run: npm run notices -- --strict
 
   test:
     name: Tests (${{ matrix.os }})
@@ -46,7 +54,78 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm rebuild node-datachannel
+      # The pinned ffmpeg for this runner, so the tests that run the real
+      # ffmpeg (media routes, thumbnails) run instead of being skipped.
+      # Cached like the e2e job's (same key: the runner's own platform/arch).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-own-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ffmpeg.json') }}
+      - run: npm run ffmpeg
       - run: npm test
+
+  # End to end (e2e/): Playwright drives the real app (Electron, the engine,
+  # the bundled ffmpeg) against a WebTorrent seeder on 127.0.0.1, with
+  # generated videos. No internet: test mode keeps the engine to that seeder
+  # (src/engine/test-mode.ts), and its windows hidden and muted.
+  e2e:
+    name: E2E (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm rebuild node-datachannel
+      # The tests run Electron itself (not a packaged app): download it.
+      - run: npm run postinstall
+
+      # Only the runner's own platform/arch, like the test job (a separate key
+      # from the build job's, which holds both macOS CPUs). A restored cache
+      # isn't trusted as it is: `npm run ffmpeg` checks the binaries' SHA-256.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-own-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ffmpeg.json') }}
+      - run: npm run ffmpeg
+
+      - name: Prepare Linux
+        if: runner.os == 'Linux'
+        run: |
+          # Ubuntu 24.04 blocks the user namespaces Chromium's sandbox needs;
+          # allow them (rather than running without the sandbox).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # The tests check the engine's sockets with lsof.
+          command -v lsof || (sudo apt-get update && sudo apt-get install -y lsof)
+
+      - name: E2E tests
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run --auto-servernum npm run e2e
+          else
+            npm run e2e
+          fi
+
+      # Traces, screenshots and the app's logs of failed tests, plus the
+      # HTML report (open with `npx playwright show-report <folder>`).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: |
+            .e2e/results
+            .e2e/report
+          include-hidden-files: true
+          retention-days: 14
 
   # Installers for testing. Not for pull requests (keeps them fast); run it on
   # main, or by hand from the Actions tab.
@@ -61,7 +140,6 @@ jobs:
           - name: macOS
             # macOS 26 has Xcode 26, which compiles the app icon (build/icon.icon).
             os: macos-26
-            args: --mac --arm64 --x64
           - name: Windows
             os: windows-2025
             args: --win --x64
@@ -69,6 +147,10 @@ jobs:
             os: ubuntu-24.04
             args: --linux --x64
     runs-on: ${{ matrix.os }}
+    env:
+      # No paid code-signing certificate: build unsigned. (macOS asks
+      # "Open Anyway" once; Windows shows a SmartScreen warning.)
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -76,11 +158,75 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm run dist -- ${{ matrix.args }} --publish never
+      - run: npm rebuild node-datachannel
+
+      # The pinned ffmpeg builds (scripts/ffmpeg.json). electron-builder's
+      # beforePack hook would fetch them too; doing it here first logs it
+      # clearly and lets the cache skip the download. (Cached binaries are
+      # checked against their pinned SHA-256 before every use.)
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/ffmpeg.json') }}
+      - name: Fetch ffmpeg
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            npm run ffmpeg -- --arch arm64
+            npm run ffmpeg -- --arch x64
+          else
+            npm run ffmpeg
+          fi
+
+      - run: npm run build
+
+      - name: Package
+        if: runner.os != 'macOS'
+        run: npx electron-builder ${{ matrix.args }} --publish never
+      # One Mac runner builds both CPUs. node_modules holds the add-ons for
+      # the runner's own CPU (arm64), so before packing the Intel build, the
+      # WebRTC add-on is swapped for its x64 prebuild (electron-builder's own
+      # rebuild is off: see npmRebuild in electron-builder.yml).
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          npx electron-builder --mac --arm64 --publish never
+          (cd node_modules/node-datachannel && node ../prebuild-install/bin.js -r napi --platform darwin --arch x64)
+          npx electron-builder --mac --x64 --publish never
+
+      # Starts the packaged app with STREAMY_SMOKE=1 (see src/main/smoke.ts):
+      # the engine must start, and /v1/health must answer through the real
+      # app:// proxy with ffmpeg's version. It prints one JSON line and exits
+      # 0 (passed) or 1. On macOS, only the build for the runner's own CPU
+      # can run.
+      - name: Smoke test
+        shell: bash
+        timeout-minutes: 5
         env:
-          # No paid code-signing certificate: build unsigned. (macOS asks
-          # "Open Anyway" once; Windows shows a SmartScreen warning.)
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          STREAMY_SMOKE: "1"
+        run: |
+          profile="$RUNNER_TEMP/streamy-smoke-profile"
+          case "$RUNNER_OS" in
+            macOS)
+              if [ "$RUNNER_ARCH" = "ARM64" ]; then dir=mac-arm64; else dir=mac; fi
+              "dist/$dir/Streamy.app/Contents/MacOS/Streamy" --user-data-dir="$profile"
+              ;;
+            Windows)
+              dist/win-unpacked/Streamy.exe --user-data-dir="$profile"
+              ;;
+            Linux)
+              # Ubuntu 24.04 blocks the user namespaces Chromium's sandbox
+              # needs; allow them (rather than running without the sandbox).
+              sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+              xvfb-run --auto-servernum dist/linux-unpacked/streamy --user-data-dir="$profile"
+              ;;
+          esac
+      - name: Logs from the smoke test
+        if: failure()
+        shell: bash
+        run: cat "$RUNNER_TEMP"/streamy-smoke-profile/logs/*.log || true
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Streamy-${{ matrix.name }}

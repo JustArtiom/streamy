@@ -1,5 +1,10 @@
 import { vi } from "vitest";
-import type { StreamyApi } from "../../../shared/api";
+import type {
+  EngineStatus,
+  StreamyApi,
+  TorrentFileOpened,
+  UpdateStatus,
+} from "../../../shared/api";
 import type {
   ActionResult,
   CacheUsage,
@@ -21,9 +26,21 @@ export const INITIAL_SNAPSHOT: SettingsSnapshot = {
     cacheDir: null,
     cacheLimitGb: 20,
     hardwareAcceleration: true,
+    checkForUpdates: true,
+    audioLanguage: null,
+    subtitleLanguage: null,
+    subtitleSize: "m",
+    subtitleBackground: "shadow",
+    subtitleColor: "white",
+    hardwareEncoding: "auto",
+    downloadLimitKBps: null,
+    uploadLimitKBps: null,
+    keepSharingMinutes: 10,
+    maxConnections: 100,
   },
   defaultCacheDir: DEFAULT_CACHE_DIR,
   hardwareAccelerationActive: true,
+  previousCacheDir: null,
 };
 
 export const INITIAL_SYSTEM: SystemIntegration = {
@@ -31,9 +48,17 @@ export const INITIAL_SYSTEM: SystemIntegration = {
   openAtLogin: false,
   openAtLoginNeedsApproval: false,
   handlesMagnetLinks: false,
+  canHandleMagnetLinks: true,
 };
 
 const OK: ActionResult = { status: "ok" };
+
+export const RUNNING_ENGINE: EngineStatus = { state: "running", error: null };
+
+export const INITIAL_UPDATE_STATUS: UpdateStatus = {
+  state: "idle",
+  checkedAt: null,
+};
 
 function createFakeStreamy() {
   let snapshot = INITIAL_SNAPSHOT;
@@ -41,6 +66,13 @@ function createFakeStreamy() {
   const changeListeners = new Set<(next: SettingsSnapshot) => void>();
   const openListeners = new Set<() => void>();
   const magnetListeners = new Set<(link: string) => void>();
+  const torrentFileListeners = new Set<(result: TorrentFileOpened) => void>();
+  let engineStatus = RUNNING_ENGINE;
+  const engineListeners = new Set<(status: EngineStatus) => void>();
+  let updateStatus: UpdateStatus = INITIAL_UPDATE_STATUS;
+  const updateListeners = new Set<(status: UpdateStatus) => void>();
+  let fullScreen = false;
+  const fullScreenListeners = new Set<(fullScreen: boolean) => void>();
 
   /** What the main process does after a change: tell every window. */
   const emit = (next: SettingsSnapshot) => {
@@ -74,6 +106,7 @@ function createFakeStreamy() {
         Promise.resolve(withSettings({ cacheDir: null })),
       ),
       showCacheDir: vi.fn(() => Promise.resolve(OK)),
+      showPreviousCacheDir: vi.fn(() => Promise.resolve(OK)),
       getCacheUsage: vi.fn((): Promise<CacheUsage> =>
         Promise.resolve({ status: "ok", bytes: 0 }),
       ),
@@ -95,6 +128,31 @@ function createFakeStreamy() {
         return Promise.resolve(system);
       }),
     },
+    engine: {
+      getStatus: vi.fn(() => Promise.resolve(engineStatus)),
+      onStatusChange: (listener) => {
+        engineListeners.add(listener);
+        return () => engineListeners.delete(listener);
+      },
+    },
+    updates: {
+      getStatus: vi.fn(() => Promise.resolve(updateStatus)),
+      onStatusChange: (listener) => {
+        updateListeners.add(listener);
+        return () => updateListeners.delete(listener);
+      },
+      check: vi.fn(() => Promise.resolve(updateStatus)),
+      install: vi.fn(() => Promise.resolve(undefined)),
+      openReleasePage: vi.fn(() => Promise.resolve(OK)),
+    },
+    player: {
+      setPlaying: vi.fn((_playing: boolean) => Promise.resolve(undefined)),
+    },
+    openLogs: vi.fn(() => Promise.resolve(OK)),
+    onTorrentFileOpened: (listener) => {
+      torrentFileListeners.add(listener);
+      return () => torrentFileListeners.delete(listener);
+    },
     onOpenSettings: (listener) => {
       openListeners.add(listener);
       return () => openListeners.delete(listener);
@@ -103,8 +161,25 @@ function createFakeStreamy() {
       magnetListeners.add(listener);
       return () => magnetListeners.delete(listener);
     },
-    onFullScreenChange: () => () => undefined,
+    onFullScreenChange: (listener) => {
+      fullScreenListeners.add(listener);
+      return () => fullScreenListeners.delete(listener);
+    },
+    // Like the main process: changing it also fires onFullScreenChange.
+    window: {
+      isFullScreen: vi.fn(() => Promise.resolve(fullScreen)),
+      setFullScreen: vi.fn((next: boolean) => {
+        setFullScreen(next);
+        return Promise.resolve(undefined);
+      }),
+    },
   } satisfies StreamyApi;
+
+  function setFullScreen(next: boolean) {
+    if (next === fullScreen) return;
+    fullScreen = next;
+    for (const listener of fullScreenListeners) listener(fullScreen);
+  }
 
   return {
     api,
@@ -112,6 +187,17 @@ function createFakeStreamy() {
     reset(nextSystem: SystemIntegration = INITIAL_SYSTEM) {
       system = nextSystem;
       emit(INITIAL_SNAPSHOT);
+      // Told to listeners too, so stores that follow the engine start over.
+      engineStatus = RUNNING_ENGINE;
+      for (const listener of engineListeners) listener(engineStatus);
+      updateStatus = INITIAL_UPDATE_STATUS;
+      for (const listener of updateListeners) listener(updateStatus);
+      if (fullScreen) setFullScreen(false);
+    },
+    /** Pretend the updater's state changed in the main process. */
+    setUpdateStatus(status: UpdateStatus) {
+      updateStatus = status;
+      for (const listener of updateListeners) listener(status);
     },
     /** Pretend the settings changed in the main process. */
     emit,
@@ -122,6 +208,17 @@ function createFakeStreamy() {
     /** Pretend a magnet link was clicked in a browser. */
     openMagnetLink(link: string) {
       for (const listener of magnetListeners) listener(link);
+    },
+    /** Pretend a .torrent file was opened from the OS. */
+    openTorrentFile(result: TorrentFileOpened) {
+      for (const listener of torrentFileListeners) listener(result);
+    },
+    /** Pretend the window entered or left full screen (View menu, F11…). */
+    setFullScreen,
+    /** Pretend the engine's state changed in the main process. */
+    setEngineStatus(status: EngineStatus) {
+      engineStatus = status;
+      for (const listener of engineListeners) listener(status);
     },
   };
 }

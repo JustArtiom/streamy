@@ -7,12 +7,17 @@ export default defineConfig({
     restoreMocks: true,
     projects: [
       {
-        // Main-process logic: plain Node.js, no Electron needed.
+        // Node.js side: the main process and the engine. Plain Node.js, no
+        // Electron needed (Electron is faked where it's used).
         extends: true,
         test: {
-          name: "main",
+          name: "node",
           environment: "node",
-          include: ["src/main/**/*.test.ts"],
+          include: [
+            "src/main/**/*.test.ts",
+            "src/engine/**/*.test.ts",
+            "src/shared/**/*.test.ts",
+          ],
         },
       },
       {

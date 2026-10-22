@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
-import type { SystemIntegration } from "../../../../shared/settings";
+import type {
+  SettingsSnapshot,
+  SystemIntegration,
+} from "../../../../shared/settings";
 import { SettingRow } from "@/components/settings/setting-row";
 import { Switch } from "@/components/ui/switch";
 import { platform } from "@/lib/platform";
-import { runAction, systemApi } from "@/lib/settings";
+import { runAction, settingsApi, systemApi } from "@/lib/settings";
 
 const ONLY_INSTALLED = "Only works in the installed app.";
 
-export function GeneralSection() {
+export function GeneralSection({ snapshot }: { snapshot: SettingsSnapshot }) {
+  const { checkForUpdates } = snapshot.settings;
   const [system, setSystem] = useState<SystemIntegration | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +42,8 @@ export function GeneralSection() {
 
   // Linux can make Streamy the magnet handler but can't undo it.
   const magnetLocked = platform === "linux" && system.handlesMagnetLinks;
+  // The Linux AppImage can't become the magnet app at all (only the .deb can).
+  const magnetUnsupported = system.available && !system.canHandleMagnetLinks;
 
   return (
     <>
@@ -69,9 +75,11 @@ export function GeneralSection() {
         description={
           !system.available
             ? `Clicking a magnet link in your browser opens it here. ${ONLY_INSTALLED}`
-            : magnetLocked
-              ? "To stop, choose another app for magnet links in your system settings."
-              : "Clicking a magnet link in your browser opens it here."
+            : magnetUnsupported
+              ? "The AppImage can't open magnet links. Install the .deb version for this."
+              : magnetLocked
+                ? "To stop, choose another app for magnet links in your system settings."
+                : "Clicking a magnet link in your browser opens it here."
         }
       >
         {({ titleId, descriptionId }) => (
@@ -79,9 +87,28 @@ export function GeneralSection() {
             aria-labelledby={titleId}
             aria-describedby={descriptionId}
             checked={system.handlesMagnetLinks}
-            disabled={!system.available || magnetLocked}
+            disabled={!system.available || magnetUnsupported || magnetLocked}
             onCheckedChange={(enabled) => {
               change(() => systemApi.setHandlesMagnetLinks(enabled));
+            }}
+          />
+        )}
+      </SettingRow>
+
+      <SettingRow
+        title="Check for updates automatically"
+        description="Asks GitHub for new versions when Streamy starts and every few hours. You can always check by hand in Advanced."
+      >
+        {({ titleId, descriptionId }) => (
+          <Switch
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            checked={checkForUpdates}
+            onCheckedChange={(enabled) => {
+              setError(null);
+              void runAction(() =>
+                settingsApi.update({ checkForUpdates: enabled }),
+              ).then(setError);
             }}
           />
         )}

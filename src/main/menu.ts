@@ -2,6 +2,8 @@ import { app, Menu, type MenuItemConstructorOptions } from "electron";
 
 export interface AppActions {
   openSettings: () => void;
+  /** Asks for a .torrent file and opens it. */
+  openTorrentFile: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
@@ -18,6 +20,11 @@ export function setAppMenu(actions: AppActions): void {
     label: isMac ? "Settings…" : "Settings",
     accelerator: "CmdOrCtrl+,",
     click: actions.openSettings,
+  };
+  const openTorrentFile: MenuItemConstructorOptions = {
+    label: "Open Torrent File…",
+    accelerator: "CmdOrCtrl+O",
+    click: actions.openTorrentFile,
   };
   const devTools: MenuItemConstructorOptions[] = app.isPackaged
     ? []
@@ -47,12 +54,24 @@ export function setAppMenu(actions: AppActions): void {
               { role: "quit" },
             ],
           } satisfies MenuItemConstructorOptions,
-          { role: "fileMenu" } satisfies MenuItemConstructorOptions,
+          {
+            label: "File",
+            submenu: [
+              openTorrentFile,
+              { type: "separator" },
+              { role: "close" },
+            ],
+          } satisfies MenuItemConstructorOptions,
         ]
       : [
           {
             label: "File",
-            submenu: [settings, { type: "separator" }, { role: "quit" }],
+            submenu: [
+              openTorrentFile,
+              settings,
+              { type: "separator" },
+              { role: "quit" },
+            ],
           } satisfies MenuItemConstructorOptions,
         ]),
     { role: "editMenu" },

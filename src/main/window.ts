@@ -23,16 +23,32 @@ function themeColors() {
 
 /**
  * Windows/Linux: the native minimize/maximize/close buttons drawn on top of
- * our title bar, in our colors. 1px shorter than the bar, so they don't paint
- * over its bottom border (the line under the title bar stays full width).
+ * our title bar, in our colors. As tall as the bar at this interface size
+ * (`zoom`, the uiScale setting), minus 1px so they don't paint over its
+ * bottom border (the line under the title bar stays full width).
  */
-function titleBarOverlay() {
+export function titleBarOverlay(zoom: number) {
   const colors = themeColors();
   return {
     color: colors.background,
     symbolColor: colors.foreground,
-    height: TITLE_BAR_HEIGHT - 1,
+    height: Math.round(TITLE_BAR_HEIGHT * zoom) - 1,
   };
+}
+
+/** macOS: where the traffic lights go, centered in our bar at this size. */
+export function trafficLightPosition(zoom: number) {
+  return { x: 16, y: Math.round((TITLE_BAR_HEIGHT * zoom - 16) / 2) };
+}
+
+/**
+ * Sets a window's interface size (the uiScale setting): the page's zoom,
+ * and the native window buttons to match the title bar's new height.
+ */
+export function setInterfaceScale(win: BrowserWindow, zoom: number): void {
+  win.webContents.setZoomFactor(zoom);
+  if (isMac) win.setWindowButtonPosition(trafficLightPosition(zoom));
+  else win.setTitleBarOverlay(titleBarOverlay(zoom));
 }
 
 /** Work areas of all screens, primary first (for restoring the window). */
@@ -49,11 +65,17 @@ interface MainWindowOptions {
   stateFile: string;
   /** Interface size to start with (the uiScale setting). */
   zoomFactor: number;
+  /**
+   * Never shown and muted, but still painting and playing: the smoke test
+   * (smoke.ts) and the e2e tests (test-mode.ts).
+   */
+  hidden?: boolean;
 }
 
 export function createMainWindow({
   stateFile,
   zoomFactor,
+  hidden = false,
 }: MainWindowOptions): BrowserWindow {
   const state = loadWindowState(stateFile, screenWorkAreas());
   const win = new BrowserWindow({
@@ -72,24 +94,33 @@ export function createMainWindow({
     titleBarStyle: "hidden",
     ...(isMac
       ? // macOS: keep the traffic lights, centered in our bar.
-        { trafficLightPosition: { x: 16, y: (TITLE_BAR_HEIGHT - 16) / 2 } }
+        { trafficLightPosition: trafficLightPosition(zoomFactor) }
       : // Windows/Linux: native window buttons on top of our bar.
-        { titleBarOverlay: titleBarOverlay() }),
+        { titleBarOverlay: titleBarOverlay(zoomFactor) }),
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: join(import.meta.dirname, "../preload/index.cjs"),
       // These are Electron's defaults; spelled out so nobody turns them off.
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
       zoomFactor,
+      // Timers and video in a hidden window keep running at full speed
+      // (the e2e tests watch videos in it).
+      ...(hidden && { backgroundThrottling: false }),
     },
+    // A hidden window still renders (Electron's default, spelled out).
+    ...(hidden && { paintWhenInitiallyHidden: true }),
   });
 
-  win.once("ready-to-show", () => {
-    if (state.maximized) win.maximize();
-    win.show();
-  });
+  if (hidden) {
+    win.webContents.setAudioMuted(true);
+  } else {
+    win.once("ready-to-show", () => {
+      if (state.maximized) win.maximize();
+      win.show();
+    });
+  }
 
   // Remember the size and position shortly after every change (so a crash or
   // force quit doesn't lose it), and once more when the window closes.
@@ -121,7 +152,9 @@ export function createMainWindow({
   // Follow the OS light/dark switch while the app is open.
   const onThemeChange = () => {
     win.setBackgroundColor(themeColors().background);
-    if (!isMac) win.setTitleBarOverlay(titleBarOverlay());
+    if (!isMac) {
+      win.setTitleBarOverlay(titleBarOverlay(win.webContents.getZoomFactor()));
+    }
   };
   nativeTheme.on("updated", onThemeChange);
   win.on("closed", () => {

@@ -1,6 +1,10 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { act, cleanup } from "@testing-library/react";
+import { afterEach, beforeEach } from "vitest";
+import { resetAnnouncerForTests } from "@/lib/announcer";
+import { resetIpNoticeForTests } from "@/lib/ip-notice";
+import { toast } from "@/lib/toast";
+import { takeUnansweredEngineCalls } from "@/test/engine";
 import { fakeStreamy } from "@/test/fake-streamy";
 
 // The UI expects the preload script's API. Installed before any test file
@@ -28,6 +32,32 @@ HTMLDialogElement.prototype.show = openDialog;
 HTMLDialogElement.prototype.showModal = openDialog;
 HTMLDialogElement.prototype.close = closeDialog;
 
+// Nor pointer capture, which toasts use for swiping (a press on a toast's
+// button starts one).
+Element.prototype.setPointerCapture = () => undefined;
+Element.prototype.releasePointerCapture = () => undefined;
+Element.prototype.hasPointerCapture = () => false;
+
+// Every test starts with a running engine and nothing remembered.
+beforeEach(() => {
+  act(() => {
+    fakeStreamy.reset();
+  });
+});
+
 afterEach(() => {
   cleanup();
+  // Sonner shows a new Toaster the toasts still open: without this, a
+  // test's toasts would turn up in the next test.
+  toast.dismiss();
+  localStorage.clear();
+  resetIpNoticeForTests();
+  resetAnnouncerForTests();
+  // A request the test didn't plan for is a bug in the page or the test.
+  const unanswered = takeUnansweredEngineCalls();
+  if (unanswered.length > 0) {
+    throw new Error(
+      `The page asked the fake engine for routes the test gave no answer:\n  ${[...new Set(unanswered)].join("\n  ")}\nAdd them to mockEngine({ … }).`,
+    );
+  }
 });

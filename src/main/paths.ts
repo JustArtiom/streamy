@@ -22,6 +22,22 @@ export function configureDataPaths(): void {
   const userData = customUserData ?? join(app.getPath("appData"), folderName);
   mkdirSync(userData, { recursive: true });
   app.setPath("userData", userData);
+  // The installed app uses the OS log folder (e.g. ~/Library/Logs/Streamy).
+  // Dev builds and custom profiles keep their logs with their data, so they
+  // never mix with the installed app's.
+  if (!app.isPackaged || customUserData) {
+    app.setAppLogsPath(join(userData, "logs"));
+  }
+}
+
+/** Where main.log and engine.log go. */
+export function logsDir(): string {
+  return app.getPath("logs");
+}
+
+/** True when started with --user-data-dir (a separate profile, e.g. for tests). */
+export function hasCustomUserData(): boolean {
+  return customUserData !== undefined;
 }
 
 /** A file in the app's data folder (e.g. settings.json). */

@@ -1,6 +1,13 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Health } from "../../../../shared/engine-api";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { closeSettings, openSettings } from "@/lib/settings";
 import {
@@ -64,6 +71,30 @@ describe("opening and closing", () => {
 
     expect(dialog).not.toHaveAttribute("open");
   });
+
+  it("starts the sections over each time it opens", async () => {
+    api.settings.getCacheUsage.mockResolvedValue({
+      status: "ok",
+      bytes: 3_400_000_000,
+    });
+    const { user } = await renderSection("Storage");
+    expect(await screen.findByText("3.4 GB")).toBeInTheDocument();
+
+    // Cleared from somewhere else while the dialog was closed.
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Space used")).not.toBeInTheDocument();
+    });
+    api.settings.getCacheUsage.mockResolvedValue({ status: "ok", bytes: 0 });
+    act(() => {
+      openSettings();
+    });
+
+    // Measured again: not the old number, and nothing left to clear.
+    expect(await screen.findByText("0 bytes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear now…" })).toBeDisabled();
+    expect(api.settings.getCacheUsage).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("General", () => {
@@ -94,6 +125,36 @@ describe("General", () => {
     expect(login).toHaveAccessibleDescription(
       /only works in the installed app/i,
     );
+  });
+
+  it("explains that the Linux AppImage can't open magnet links", async () => {
+    act(() => {
+      fakeStreamy.reset({ ...INITIAL_SYSTEM, canHandleMagnetLinks: false });
+    });
+    await renderSection("General");
+
+    const magnet = await screen.findByRole("switch", {
+      name: "Open magnet links with Streamy",
+    });
+    expect(magnet).toBeDisabled();
+    expect(magnet).toHaveAccessibleDescription(/install the \.deb/i);
+  });
+
+  it("checks for updates automatically, unless turned off", async () => {
+    const { user } = await renderSection("General");
+    const updates = await screen.findByRole("switch", {
+      name: "Check for updates automatically",
+    });
+    expect(updates).toBeChecked();
+    // Turning it off is a privacy choice: say who it talks to.
+    expect(updates).toHaveAccessibleDescription(/GitHub/);
+
+    await user.click(updates);
+
+    expect(api.settings.update).toHaveBeenCalledWith({
+      checkForUpdates: false,
+    });
+    expect(updates).not.toBeChecked();
   });
 
   it("explains when macOS still needs the user's approval", async () => {
@@ -163,6 +224,21 @@ describe("Storage", () => {
     expect(screen.getByText(DEFAULT_CACHE_DIR)).toBeInTheDocument();
   });
 
+  it("never shows a system error from the main process", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { user } = await renderSection("Storage");
+    api.settings.chooseCacheDir.mockResolvedValueOnce({
+      status: "error",
+      message: "EACCES: permission denied, mkdir '/Volumes/Big/Streamy'",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Change…" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong. Please try again.",
+    );
+  });
+
   it("explains why a chosen folder can't be used", async () => {
     const { user } = await renderSection("Storage");
     api.settings.chooseCacheDir.mockResolvedValueOnce({
@@ -201,6 +277,39 @@ describe("Storage", () => {
     expect(api.settings.clearCache).toHaveBeenCalledOnce();
   });
 
+  it("can't be closed while it clears", async () => {
+    api.settings.getCacheUsage.mockResolvedValue({ status: "ok", bytes: 10 });
+    let finish: () => void = () => undefined;
+    api.settings.clearCache.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => {
+            resolve({ status: "ok" });
+          };
+        }),
+    );
+    const { user } = await renderSection("Storage");
+    await user.click(await screen.findByRole("button", { name: "Clear now…" }));
+    const confirm = screen.getByRole("dialog", { name: "Clear all videos?" });
+
+    await user.click(screen.getByRole("button", { name: "Clear videos" }));
+
+    expect(fireEvent(confirm, new Event("cancel", { cancelable: true }))).toBe(
+      false,
+    );
+    fireEvent.pointerDown(confirm);
+    fireEvent.pointerUp(confirm);
+    expect(confirm).toHaveAttribute("open");
+
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(confirm).not.toHaveAttribute("open");
+    });
+  });
+
   it("says when the chosen folder isn't available", async () => {
     api.settings.getCacheUsage.mockResolvedValue({ status: "missing" });
     await renderSection("Storage");
@@ -209,6 +318,25 @@ describe("Storage", () => {
       await screen.findByText(/the folder isn't available/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear now…" })).toBeDisabled();
+  });
+
+  it("says videos stay in the old folder after a change, and shows it", async () => {
+    const { user } = await renderSection("Storage");
+    expect(screen.queryByText(/stay in the old folder/i)).toBeNull();
+
+    act(() => {
+      fakeStreamy.emit({
+        ...INITIAL_SNAPSHOT,
+        settings: { ...INITIAL_SNAPSHOT.settings, cacheDir: "/Volumes/Big" },
+        previousCacheDir: DEFAULT_CACHE_DIR,
+      });
+    });
+    expect(screen.getByText(/stay in the old folder/i)).toHaveTextContent(
+      DEFAULT_CACHE_DIR,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Show old folder" }));
+    expect(api.settings.showPreviousCacheDir).toHaveBeenCalledOnce();
   });
 
   it("changes the size limit", async () => {
@@ -223,6 +351,164 @@ describe("Storage", () => {
 });
 
 describe("Advanced", () => {
+  const HEALTH: Health = {
+    version: "0.1.0",
+    uptime: 5,
+    ffmpeg: { version: "8.1.3-Jellyfin", error: null },
+    encoder: "h264_videotoolbox",
+    lowDiskSpace: false,
+  };
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(() => Promise.resolve(Response.json(HEALTH)));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const engineLine = () =>
+    screen.getByText(
+      (_text, element) => element?.getAttribute("role") === "status",
+    );
+
+  it("shows the engine's state, its ffmpeg and its encoder", async () => {
+    await renderSection("Advanced");
+
+    await waitFor(() => {
+      expect(engineLine()).toHaveTextContent(
+        "Running · ffmpeg 8.1.3 · VideoToolbox",
+      );
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "app://streamy/api/v1/health",
+      expect.anything(),
+    );
+  });
+
+  it("follows the engine when it stops and comes back", async () => {
+    await renderSection("Advanced");
+    await waitFor(() => {
+      expect(engineLine()).toHaveTextContent("Running");
+    });
+
+    act(() => {
+      fakeStreamy.setEngineStatus({
+        state: "restarting",
+        error: "The playback engine stopped unexpectedly.",
+      });
+    });
+    expect(engineLine()).toHaveTextContent("Reconnecting…");
+    expect(
+      screen.getByText("The playback engine stopped unexpectedly."),
+    ).toBeInTheDocument();
+
+    act(() => {
+      fakeStreamy.setEngineStatus({
+        state: "failed",
+        error: "The library file can't be opened.",
+      });
+    });
+    expect(engineLine()).toHaveTextContent(/not running/i);
+    expect(
+      screen.getByText("The library file can't be opened."),
+    ).toBeInTheDocument();
+  });
+
+  it("names the CPU encoder, and says when ffmpeg doesn't work", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        Response.json({
+          ...HEALTH,
+          ffmpeg: { version: null, error: "spawn ffmpeg ENOENT" },
+          encoder: "libx264",
+        }),
+      ),
+    );
+    await renderSection("Advanced");
+
+    await waitFor(() => {
+      expect(engineLine()).toHaveTextContent(
+        "Running · ffmpeg isn't working · CPU (x264)",
+      );
+    });
+    // Never the raw system error, even if the engine sent one.
+    expect(screen.queryByText("spawn ffmpeg ENOENT")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Videos that need converting won't play. The logs say why.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ENOENT/)).not.toBeInTheDocument();
+  });
+
+  it("says what went wrong in plain words, even if told otherwise", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await renderSection("Advanced");
+
+    act(() => {
+      fakeStreamy.setEngineStatus({
+        state: "failed",
+        error: "Error: Cannot find module '/app/out/engine/index.js'",
+      });
+    });
+
+    expect(engineLine()).toHaveTextContent(/not running/i);
+    expect(
+      screen.getByText("It keeps stopping. The logs say why."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Cannot find module/)).not.toBeInTheDocument();
+  });
+
+  it("stops asking the engine while the dialog is closed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { user } = await renderSection("Advanced");
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalled();
+      });
+
+      await user.click(screen.getByRole("button", { name: "Close settings" }));
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      const asked = fetchMock.mock.calls.length;
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+      expect(fetchMock.mock.calls.length).toBe(asked);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("doesn't ask the engine anything while it isn't running", async () => {
+    act(() => {
+      fakeStreamy.setEngineStatus({ state: "starting", error: null });
+    });
+    await renderSection("Advanced");
+
+    await waitFor(() => {
+      expect(engineLine()).toHaveTextContent("Starting…");
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the logs folder", async () => {
+    const { user } = await renderSection("Advanced");
+    api.openLogs.mockResolvedValueOnce({
+      status: "error",
+      message: "No app can open folders.",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Open logs folder" }));
+
+    expect(api.openLogs).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No app can open folders.",
+    );
+  });
+
   it("asks for a restart after changing hardware acceleration", async () => {
     const { user } = await renderSection("Advanced");
     expect(screen.queryByText(/restart streamy/i)).toBeNull();

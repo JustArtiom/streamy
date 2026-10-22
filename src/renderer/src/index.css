@@ -26,11 +26,43 @@
   --primary: light-dark(#0a0a0a, #ededed);
   --primary-hover: light-dark(#383838, #cccccc);
   --primary-foreground: light-dark(#ffffff, #0a0a0a);
+  /*
+   * Keyboard focus rings: at least 3:1 against the page and hover
+   * backgrounds (WCAG 1.4.11), in both themes.
+   */
+  --ring: light-dark(rgb(10 10 10 / 0.5), rgb(237 237 237 / 0.5));
+  /* A switch that's off: its track and thumb stay 3:1 apart from the page. */
+  --switch-off: light-dark(#8c8c8c, #767676);
 
-  --success: light-dark(#16a34a, #22c55e);
-  --warning: light-dark(#d97706, #f59e0b);
-  --danger: light-dark(#dc2626, #f87171);
-  --info: light-dark(#2563eb, #60a5fa);
+  /*
+   * Status colors. Used as text, often on their own 6–12% tint (badges,
+   * alerts), so the light ones are dark enough for 4.5:1 there.
+   */
+  --success: light-dark(#166534, #22c55e);
+  --warning: light-dark(#b45309, #f59e0b);
+  --danger: light-dark(#b91c1c, #f87171);
+  --info: light-dark(#1d4ed8, #60a5fa);
+}
+
+@theme {
+  /* The player's "+10 s" / "Volume 40%" confirmation: pop in, fade out. */
+  --animate-flash: flash 700ms ease-out forwards;
+  @keyframes flash {
+    0% {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    15% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
 }
 
 @theme inline {
@@ -47,6 +79,8 @@
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-switch-off: var(--switch-off);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
@@ -61,6 +95,17 @@
 
 /* Buttons inside a drag region must opt out, or they can't be clicked. */
 @utility no-drag-region {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/*
+ * A modal dialog's backdrop covers the title bar, but Electron finds drag
+ * regions in the page's layout, not by what's on top: pressing the dimmed
+ * title bar would drag the window instead of closing the dialog. So there's
+ * no dragging while one is open.
+ */
+:root:has(dialog:modal) .drag-region {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }

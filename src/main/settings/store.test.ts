@@ -48,6 +48,17 @@ describe("parseSettingsFile", () => {
       cacheDir: "/Volumes/Movies",
       cacheLimitGb: null,
       hardwareAcceleration: false,
+      checkForUpdates: false,
+      audioLanguage: "pt-BR",
+      subtitleLanguage: "off",
+      subtitleSize: "xl",
+      subtitleBackground: "box",
+      subtitleColor: "yellow",
+      hardwareEncoding: "off",
+      downloadLimitKBps: 2048,
+      uploadLimitKBps: null,
+      keepSharingMinutes: null,
+      maxConnections: 25,
     };
 
     expect(parseSettingsFile({ version: 1, ...settings }).settings).toEqual(

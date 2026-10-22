@@ -1,24 +1,30 @@
 import {
+  Clapperboard,
   HardDrive,
   type LucideIcon,
+  Network,
   Palette,
   SlidersHorizontal,
   Wrench,
   X,
 } from "lucide-react";
-import { type ComponentType, useId, useState } from "react";
+import { type ComponentType, useEffect, useId, useState } from "react";
 import type { SettingsSnapshot } from "../../../../shared/settings";
 import { AdvancedSection } from "@/components/settings/advanced-section";
 import { AppearanceSection } from "@/components/settings/appearance-section";
 import { GeneralSection } from "@/components/settings/general-section";
+import { NetworkSection } from "@/components/settings/network-section";
+import { PlaybackSection } from "@/components/settings/playback-section";
 import { StorageSection } from "@/components/settings/storage-section";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/cn";
 import {
   closeSettings,
+  showSettingsSection,
   useSettings,
   useSettingsDialogOpen,
+  useSettingsSection,
 } from "@/lib/settings";
 
 type Section = {
@@ -42,15 +48,61 @@ const SECTIONS: Section[] = [
     icon: Palette,
     Content: AppearanceSection,
   },
+  {
+    id: "playback",
+    label: "Playback",
+    icon: Clapperboard,
+    Content: PlaybackSection,
+  },
   { id: "storage", label: "Storage", icon: HardDrive, Content: StorageSection },
+  { id: "network", label: "Network", icon: Network, Content: NetworkSection },
   { id: "advanced", label: "Advanced", icon: Wrench, Content: AdvancedSection },
 ];
+
+/** The dialog's fade-out (Dialog's duration-150), plus a little. */
+const CLOSE_ANIMATION_MS = 200;
+
+/**
+ * The sections are in the page only while the dialog is open (and while it
+ * fades out), and each opening starts them fresh: "Space used" is measured
+ * again, old errors are gone, and nothing keeps working in the background
+ * (Advanced asks the engine for its health every few seconds).
+ * Returns null while closed, else a key that changes with each opening.
+ */
+function useOpenSession(open: boolean): number | null {
+  const [openings, setOpenings] = useState(open ? 1 : 0);
+  const [shown, setShown] = useState(open);
+  const [wasOpen, setWasOpen] = useState(open);
+  // Adjusted while rendering (not in an effect), so the sections are there
+  // in the very first frame of the dialog.
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setOpenings(openings + 1);
+      setShown(true);
+    }
+  }
+
+  useEffect(() => {
+    if (open || !shown) return;
+    const timer = setTimeout(() => {
+      setShown(false);
+    }, CLOSE_ANIMATION_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [open, shown]);
+
+  return shown ? openings : null;
+}
 
 /** Opened from the title bar's gear, ⌘, / Ctrl+, or the app menu. */
 export function SettingsDialog() {
   const open = useSettingsDialogOpen();
+  const session = useOpenSession(open);
   const snapshot = useSettings();
-  const [sectionId, setSectionId] = useState(SECTIONS[0]?.id);
+  // In a store, so others can open a given section (openSettings("storage")).
+  const sectionId = useSettingsSection();
   const titleId = useId();
 
   const section = SECTIONS.find((item) => item.id === sectionId) ?? SECTIONS[0];
@@ -78,10 +130,10 @@ export function SettingsDialog() {
               type="button"
               aria-current={item.id === section.id ? "page" : undefined}
               onClick={() => {
-                setSectionId(item.id);
+                showSettingsSection(item.id);
               }}
               className={cn(
-                "flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-foreground/20 [&_svg]:size-4 [&_svg]:shrink-0",
+                "flex h-8 items-center gap-2 rounded-md px-2 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4 [&_svg]:shrink-0",
                 item.id === section.id
                   ? "bg-accent font-medium text-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -106,11 +158,12 @@ export function SettingsDialog() {
             </Button>
           </header>
           <div className="flex-1 overflow-y-auto px-5 py-4">
-            {snapshot ? (
-              <section.Content snapshot={snapshot} />
-            ) : (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            )}
+            {session !== null &&
+              (snapshot ? (
+                <section.Content key={session} snapshot={snapshot} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ))}
           </div>
         </div>
       </div>
