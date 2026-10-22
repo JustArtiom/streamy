@@ -1,6 +1,7 @@
 import {
   Clapperboard,
   HardDrive,
+  Info,
   type LucideIcon,
   Network,
   Palette,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import { type ComponentType, useEffect, useId, useState } from "react";
 import type { SettingsSnapshot } from "../../../../shared/settings";
+import { AboutSection } from "@/components/settings/about-section";
 import { AdvancedSection } from "@/components/settings/advanced-section";
 import { AppearanceSection } from "@/components/settings/appearance-section";
 import { GeneralSection } from "@/components/settings/general-section";
@@ -34,7 +36,14 @@ type Section = {
   Content: ComponentType<{ snapshot: SettingsSnapshot }>;
 };
 
-// New groups of settings go here.
+// New groups of settings go here. What goes where:
+//   General     how Streamy fits into the computer (login, magnet links)
+//   Appearance  how it looks
+//   Playback    what you see and hear (languages, subtitles)
+//   Storage     the video folder
+//   Network     downloading and sharing
+//   Advanced    graphics card switches, and what helps when something breaks
+//   About       version, updates, licences
 const SECTIONS: Section[] = [
   {
     id: "general",
@@ -57,6 +66,7 @@ const SECTIONS: Section[] = [
   { id: "storage", label: "Storage", icon: HardDrive, Content: StorageSection },
   { id: "network", label: "Network", icon: Network, Content: NetworkSection },
   { id: "advanced", label: "Advanced", icon: Wrench, Content: AdvancedSection },
+  { id: "about", label: "About", icon: Info, Content: AboutSection },
 ];
 
 /** The dialog's fade-out (Dialog's duration-150), plus a little. */

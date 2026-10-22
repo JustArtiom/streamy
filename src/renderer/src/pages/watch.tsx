@@ -14,7 +14,7 @@ import { ResumePrompt } from "@/components/player/resume-prompt";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { useDocumentTitle } from "@/hooks/use-document-title";
-import { useGoBack } from "@/hooks/use-go-back";
+import { useGoBack } from "@/hooks/use-history-nav";
 import { useLibraryTorrent, useThumbnailPath } from "@/hooks/use-library";
 import { useMediaInfo } from "@/hooks/use-media";
 import { useNow } from "@/hooks/use-now";

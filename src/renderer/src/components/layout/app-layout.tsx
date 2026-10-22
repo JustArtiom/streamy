@@ -1,14 +1,15 @@
 import { useEffect, useRef } from "react";
 import { Outlet, useLocation, useMatches } from "react-router";
 import { Announcer } from "@/components/layout/announcer";
-import { BackButton } from "@/components/layout/back-button";
 import { DropZone } from "@/components/layout/drop-zone";
 import { EngineBanner } from "@/components/layout/engine-banner";
 import { IncomingLinks } from "@/components/layout/incoming-links";
 import { IpNoticeBanner } from "@/components/layout/ip-notice-banner";
+import { NavButtons } from "@/components/layout/nav-buttons";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TitleBar } from "@/components/title-bar";
-import { useMouseBackButton } from "@/hooks/use-mouse-back";
+import { useTrackHistory } from "@/hooks/use-history-nav";
+import { useMouseNavigation } from "@/hooks/use-mouse-navigation";
 import { cn } from "@/lib/cn";
 import { useWindowFullScreen } from "@/lib/full-screen";
 
@@ -29,9 +30,9 @@ function isFullBleed(handle: unknown): boolean {
 }
 
 /**
- * Every page: the title bar (with Back everywhere but Home), news banners,
- * then the page. Settings, drag and drop and links from outside work from
- * any page, and so does the mouse's back button.
+ * Every page: the title bar (with Back and Forward), news banners, then the
+ * page. Settings, drag and drop and links from outside work from any page,
+ * and so do the mouse's back and forward buttons.
  *
  * When the window is in full screen on a full-bleed page (the player), the
  * title bar and banners make way, so the video gets the whole screen
@@ -44,9 +45,9 @@ export function AppLayout() {
   const fullBleed = useMatches().some((match) => isFullBleed(match.handle));
   const windowFullScreen = useWindowFullScreen();
   const chromeHidden = fullBleed && windowFullScreen;
-  const isHome = location.pathname === "/";
   const main = useRef<HTMLElement>(null);
-  useMouseBackButton();
+  useTrackHistory();
+  useMouseNavigation();
 
   // <main> scrolls, not the window, and it stays mounted between pages:
   // start each page at the top.
@@ -59,7 +60,7 @@ export function AppLayout() {
       {/* Hidden rather than removed, so Back's shortcut (⌘[) keeps working.
           (Tailwind's base styles make [hidden] win over "contents".) */}
       <div hidden={chromeHidden} className="contents">
-        <TitleBar navigation={isHome ? undefined : <BackButton />} />
+        <TitleBar navigation={<NavButtons />} />
         <EngineBanner />
         <IpNoticeBanner />
       </div>

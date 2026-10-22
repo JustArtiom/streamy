@@ -69,7 +69,7 @@ import { usePlayerShortcuts } from "@/components/player/use-player-shortcuts";
 import { useSubtitleCues } from "@/components/player/use-subtitle-cues";
 import { useVideoState } from "@/components/player/use-video-state";
 import { useEngineStatus } from "@/hooks/use-engine-status";
-import { useGoBack } from "@/hooks/use-go-back";
+import { useGoBack } from "@/hooks/use-history-nav";
 import { useThumbnailPath } from "@/hooks/use-library";
 import { ensureTorrentOpen } from "@/hooks/use-media";
 import { browserCapabilities } from "@/lib/capabilities";

@@ -43,6 +43,7 @@ describe("Settings → Playback", () => {
       "Storage",
       "Network",
       "Advanced",
+      "About",
     ]);
   });
 
@@ -112,20 +113,12 @@ describe("Settings → Playback", () => {
     expect(line.parentElement).toHaveClass("text-yellow-300");
   });
 
-  it("turns hardware video encoding off, and explains it", async () => {
-    const user = await renderPlayback();
-    const group = screen.getByRole("radiogroup", {
-      name: "Hardware video encoding",
-    });
+  it("is only about what you see and hear", async () => {
+    await renderPlayback();
+
+    // The graphics card switch moved to Advanced.
     expect(
-      within(group).getByRole("radio", { name: "Automatic" }),
-    ).toBeChecked();
-    expect(screen.getByText(/your graphics card does it faster/)).toBeVisible();
-
-    await user.click(within(group).getByRole("radio", { name: "Off" }));
-
-    expect(api.settings.update).toHaveBeenCalledWith({
-      hardwareEncoding: "off",
-    });
+      screen.queryByRole("radiogroup", { name: "Hardware video encoding" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach } from "vitest";
 import { resetAnnouncerForTests } from "@/lib/announcer";
+import { resetHistoryForTests } from "@/lib/history-stack";
 import { resetIpNoticeForTests } from "@/lib/ip-notice";
 import { toast } from "@/lib/toast";
 import { takeUnansweredEngineCalls } from "@/test/engine";
@@ -53,6 +54,7 @@ afterEach(() => {
   localStorage.clear();
   resetIpNoticeForTests();
   resetAnnouncerForTests();
+  resetHistoryForTests();
   // A request the test didn't plan for is a bug in the page or the test.
   const unanswered = takeUnansweredEngineCalls();
   if (unanswered.length > 0) {

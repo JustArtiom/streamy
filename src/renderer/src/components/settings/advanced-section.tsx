@@ -1,31 +1,23 @@
-import {
-  Download,
-  ExternalLink,
-  FileText,
-  FolderOpen,
-  RefreshCw,
-  RotateCw,
-  X,
-} from "lucide-react";
-import { type ReactNode, useEffect, useId, useState } from "react";
-import type { EngineStatus, UpdateStatus } from "../../../../shared/api";
+import { FolderOpen, RotateCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { EngineStatus } from "../../../../shared/api";
 import { ENGINE_API_BASE, type Health } from "../../../../shared/engine-api";
-import type { SettingsSnapshot } from "../../../../shared/settings";
+import type {
+  HardwareEncoding,
+  SettingsSnapshot,
+} from "../../../../shared/settings";
 import { SettingRow } from "@/components/settings/setting-row";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Dialog } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
-import {
-  checkForUpdates,
-  useUpdateStatus,
-} from "@/components/updates/update-status";
-import { useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/cn";
-import { formatRelativeTime } from "@/lib/format";
 import { peopleText } from "@/lib/people-text";
 import { runAction, settingsApi } from "@/lib/settings";
+
+// Advanced: the graphics card switches, and what helps when something goes
+// wrong (engine status, logs, data folder, reset). Version, updates and
+// licences live in About.
 
 /** How often /v1/health is asked again while this section is open. */
 const HEALTH_REFRESH_MS = 5_000;
@@ -41,6 +33,11 @@ const ENCODER_NAMES: Record<string, string> = {
   h264_v4l2m2m: "V4L2",
   libx264: "CPU (x264)",
 };
+
+const ENCODING_OPTIONS: { value: HardwareEncoding; label: string }[] = [
+  { value: "auto", label: "Automatic" },
+  { value: "off", label: "Off" },
+];
 
 /** "8.1.3-Jellyfin" → "8.1.3". Unusual versions are shown as they are. */
 function shortVersion(version: string): string {
@@ -116,269 +113,6 @@ function useEngineInfo(): {
   return { status, health: running ? health : null };
 }
 
-/** Streamy's version (from the main process), or null for a moment. */
-function useAppVersion(): string | null {
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    window.streamy
-      .getAppInfo()
-      .then((info) => {
-        if (active) setVersion(info.version);
-      })
-      .catch((error: unknown) => {
-        console.error(error);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  return version;
-}
-
-/**
- * "Streamy 0.1.0", what the updater is up to (src/main/updates), and the
- * button that fits: check, download (macOS), or restart to update.
- */
-function UpdatesRow({
-  autoCheck,
-  onError,
-}: {
-  /** Settings → General → "Check for updates automatically". */
-  autoCheck: boolean;
-  onError: (message: string | null) => void;
-}) {
-  const version = useAppVersion();
-  const status = useUpdateStatus();
-  // "Checked 5 minutes ago" moves on while the section is open.
-  const now = useNow(30_000);
-  const [checking, setChecking] = useState(false);
-  const [restarting, setRestarting] = useState(false);
-
-  const check = (label: string) => (
-    <Button
-      size="sm"
-      variant="outline"
-      loading={checking || status?.state === "checking"}
-      onClick={() => {
-        setChecking(true);
-        void runAction(checkForUpdates).then((message) => {
-          setChecking(false);
-          onError(message);
-        });
-      }}
-    >
-      {!checking && status?.state !== "checking" && <RefreshCw />}
-      {label}
-    </Button>
-  );
-  const openReleasePage = (label: string, icon: ReactNode) => (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={() => {
-        void runAction(() => window.streamy.updates.openReleasePage()).then(
-          onError,
-        );
-      }}
-    >
-      {icon}
-      {label}
-    </Button>
-  );
-
-  const { text, action } = describeUpdates(status, now, autoCheck, {
-    check,
-    download: () => openReleasePage("Download", <Download />),
-    releases: () => openReleasePage("Releases", <ExternalLink />),
-    restart: () => (
-      <Button
-        size="sm"
-        variant="outline"
-        loading={restarting}
-        onClick={() => {
-          setRestarting(true);
-          // Streamy quits and the new version opens.
-          void runAction(() => window.streamy.updates.install()).then(
-            (message) => {
-              if (message) setRestarting(false);
-              onError(message);
-            },
-          );
-        }}
-      >
-        {!restarting && <RotateCw />}
-        Restart to update
-      </Button>
-    ),
-  });
-
-  return (
-    <SettingRow
-      title={version ? `Streamy ${version}` : "Streamy"}
-      description={
-        // Announced when it changes ("Checking…", "Up to date…").
-        <span aria-live="polite">{text}</span>
-      }
-    >
-      {action}
-    </SettingRow>
-  );
-}
-
-interface UpdateButtons {
-  check: (label: string) => ReactNode;
-  download: () => ReactNode;
-  releases: () => ReactNode;
-  restart: () => ReactNode;
-}
-
-/** What the Updates row says and offers, for each state. */
-function describeUpdates(
-  status: UpdateStatus | null,
-  now: number,
-  autoCheck: boolean,
-  buttons: UpdateButtons,
-): { text: string | null; action: ReactNode } {
-  switch (status?.state) {
-    case undefined:
-      return { text: null, action: null };
-    case "unsupported":
-      return {
-        text: "This copy of Streamy doesn't update itself. New versions are on GitHub.",
-        action: buttons.releases(),
-      };
-    case "idle": {
-      const checked =
-        status.checkedAt && formatRelativeTime(status.checkedAt, now);
-      return {
-        text: checked
-          ? `Up to date. Checked ${checked}.`
-          : autoCheck
-            ? "Streamy checks for updates by itself."
-            : "Automatic checks are off.",
-        action: buttons.check("Check for updates"),
-      };
-    }
-    case "checking":
-      return {
-        text: "Checking for updates…",
-        action: buttons.check("Check for updates"),
-      };
-    case "available":
-      return status.canInstall
-        ? { text: `Downloading version ${status.version}…`, action: null }
-        : {
-            text: `Version ${status.version} is available.`,
-            action: buttons.download(),
-          };
-    case "downloading":
-      return {
-        text: `Downloading version ${status.version}… ${status.percent}%`,
-        action: null,
-      };
-    case "ready":
-      return {
-        text: `Version ${status.version} is ready. It installs when Streamy restarts.`,
-        action: buttons.restart(),
-      };
-    case "error":
-      return {
-        // From the main process: a sentence, but never trusted blindly.
-        text: peopleText(status.message, "Couldn't check for updates."),
-        action: buttons.check("Try again"),
-      };
-  }
-}
-
-/**
- * THIRD_PARTY_NOTICES.txt (made by scripts/notices.mjs). The main process
- * serves it from the app's resources folder (see src/main/protocol.ts).
- */
-const NOTICES_URL = "app://streamy/third-party-notices.txt";
-
-type Notices = { text: string } | { error: string };
-
-/** Third-party licences, as shipped with this copy of Streamy. */
-function NoticesDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const titleId = useId();
-  const [notices, setNotices] = useState<Notices | null>(null);
-
-  // Loaded the first time it opens, then kept (it's about half a megabyte).
-  useEffect(() => {
-    if (!open || notices !== null) return;
-    const controller = new AbortController();
-    fetch(NOTICES_URL, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.text();
-      })
-      .then(
-        (text) => {
-          setNotices({ text });
-        },
-        (error: unknown) => {
-          if (controller.signal.aborted) return;
-          console.error("Could not load the licences:", error);
-          setNotices({
-            error: import.meta.env.DEV
-              ? "The licences file is missing. Run `npm run notices` to create it."
-              : "The licences file is missing from this copy of Streamy.",
-          });
-        },
-      );
-    return () => {
-      controller.abort();
-    };
-  }, [open, notices]);
-
-  const close = () => {
-    // A failed load is tried again next time.
-    if (notices && "error" in notices) setNotices(null);
-    onClose();
-  };
-
-  return (
-    <Dialog open={open} onClose={close} size="lg" aria-labelledby={titleId}>
-      <div className="flex max-h-[85dvh] flex-col">
-        <div className="flex items-center justify-between gap-4 border-b border-border py-3 pr-3 pl-6">
-          <h2 id={titleId} className="text-lg font-semibold">
-            Third-party licences
-          </h2>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Close licences"
-            onClick={close}
-          >
-            <X />
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          {notices === null ? (
-            // Only while open: a closed dialog stays in the page.
-            open && <Spinner tone="muted" label="Loading the licences" />
-          ) : "error" in notices ? (
-            <p role="alert" className="text-sm text-danger">
-              {notices.error}
-            </p>
-          ) : (
-            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-muted-foreground select-text">
-              {notices.text}
-            </pre>
-          )}
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
 /** "Running · ffmpeg 8.1.3 · VideoToolbox", or what's wrong. */
 function EngineSummary({
   status,
@@ -443,13 +177,12 @@ function EngineSummary({
 }
 
 export function AdvancedSection({ snapshot }: { snapshot: SettingsSnapshot }) {
-  const { hardwareAcceleration } = snapshot.settings;
+  const { hardwareAcceleration, hardwareEncoding } = snapshot.settings;
   const needsRestart =
     hardwareAcceleration !== snapshot.hardwareAccelerationActive;
   const engine = useEngineInfo();
 
   const [error, setError] = useState<string | null>(null);
-  const [noticesOpen, setNoticesOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -466,17 +199,12 @@ export function AdvancedSection({ snapshot }: { snapshot: SettingsSnapshot }) {
 
   return (
     <>
-      <UpdatesRow
-        autoCheck={snapshot.settings.checkForUpdates}
-        onError={setError}
-      />
-
       <SettingRow
         title="Hardware acceleration"
         description={
           <>
-            Uses your graphics card for smoother video. Turn it off if video
-            flickers or shows glitches.
+            Uses your graphics card to draw Streamy and play video. Turn it off
+            if the window or video flickers or shows glitches.
             {needsRestart && (
               <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-foreground">
                 Restart Streamy to apply this change.
@@ -512,6 +240,23 @@ export function AdvancedSection({ snapshot }: { snapshot: SettingsSnapshot }) {
             }}
           />
         )}
+      </SettingRow>
+
+      <SettingRow
+        title="Hardware video encoding"
+        description="When a video has to be converted to play, your graphics card does it faster. Turn it off if converted videos look glitchy."
+      >
+        <SegmentedControl
+          label="Hardware video encoding"
+          size="sm"
+          options={ENCODING_OPTIONS}
+          value={hardwareEncoding}
+          onChange={(next) => {
+            void runAction(() =>
+              settingsApi.update({ hardwareEncoding: next }),
+            ).then(setError);
+          }}
+        />
       </SettingRow>
 
       <SettingRow
@@ -555,23 +300,6 @@ export function AdvancedSection({ snapshot }: { snapshot: SettingsSnapshot }) {
       </SettingRow>
 
       <SettingRow
-        title="Third-party licences"
-        description="Streamy is built with software that many people made and share. Here's who, and under which licences."
-      >
-        <Button
-          size="sm"
-          variant="outline"
-          aria-label="View third-party licences"
-          onClick={() => {
-            setNoticesOpen(true);
-          }}
-        >
-          <FileText />
-          View
-        </Button>
-      </SettingRow>
-
-      <SettingRow
         title="Reset all settings"
         description="Puts every setting back to how it was when you installed Streamy. Your videos aren't deleted."
       >
@@ -592,13 +320,6 @@ export function AdvancedSection({ snapshot }: { snapshot: SettingsSnapshot }) {
           {error}
         </p>
       )}
-
-      <NoticesDialog
-        open={noticesOpen}
-        onClose={() => {
-          setNoticesOpen(false);
-        }}
-      />
 
       <ConfirmDialog
         open={confirmReset}

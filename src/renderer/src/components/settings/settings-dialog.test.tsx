@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -140,8 +141,17 @@ describe("General", () => {
     expect(magnet).toHaveAccessibleDescription(/install the \.deb/i);
   });
 
-  it("checks for updates automatically, unless turned off", async () => {
-    const { user } = await renderSection("General");
+  it("has the update switch in About, not here", async () => {
+    await renderSection("General");
+    await screen.findByRole("switch", { name: "Open at login" });
+
+    expect(
+      screen.queryByRole("switch", { name: "Check for updates automatically" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("checks for updates automatically, unless turned off (About)", async () => {
+    const { user } = await renderSection("About");
     const updates = await screen.findByRole("switch", {
       name: "Check for updates automatically",
     });
@@ -373,6 +383,27 @@ describe("Advanced", () => {
     screen.getByText(
       (_text, element) => element?.getAttribute("role") === "status",
     );
+
+  it("keeps both graphics card switches together", async () => {
+    const { user } = await renderSection("Advanced");
+
+    expect(
+      screen.getByRole("switch", { name: "Hardware acceleration" }),
+    ).toBeChecked();
+    const encoding = screen.getByRole("radiogroup", {
+      name: "Hardware video encoding",
+    });
+    expect(
+      within(encoding).getByRole("radio", { name: "Automatic" }),
+    ).toBeChecked();
+    expect(screen.getByText(/your graphics card does it faster/)).toBeVisible();
+
+    await user.click(within(encoding).getByRole("radio", { name: "Off" }));
+
+    expect(api.settings.update).toHaveBeenCalledWith({
+      hardwareEncoding: "off",
+    });
+  });
 
   it("shows the engine's state, its ffmpeg and its encoder", async () => {
     await renderSection("Advanced");

@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
-import type {
-  SettingsSnapshot,
-  SystemIntegration,
-} from "../../../../shared/settings";
+import type { SystemIntegration } from "../../../../shared/settings";
 import { SettingRow } from "@/components/settings/setting-row";
 import { Switch } from "@/components/ui/switch";
 import { platform } from "@/lib/platform";
-import { runAction, settingsApi, systemApi } from "@/lib/settings";
+import { runAction, systemApi } from "@/lib/settings";
 
 const ONLY_INSTALLED = "Only works in the installed app.";
 
-export function GeneralSection({ snapshot }: { snapshot: SettingsSnapshot }) {
-  const { checkForUpdates } = snapshot.settings;
+/** How Streamy fits into the computer: opening at login, magnet links. */
+export function GeneralSection() {
   const [system, setSystem] = useState<SystemIntegration | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,25 +87,6 @@ export function GeneralSection({ snapshot }: { snapshot: SettingsSnapshot }) {
             disabled={!system.available || magnetUnsupported || magnetLocked}
             onCheckedChange={(enabled) => {
               change(() => systemApi.setHandlesMagnetLinks(enabled));
-            }}
-          />
-        )}
-      </SettingRow>
-
-      <SettingRow
-        title="Check for updates automatically"
-        description="Asks GitHub for new versions when Streamy starts and every few hours. You can always check by hand in Advanced."
-      >
-        {({ titleId, descriptionId }) => (
-          <Switch
-            aria-labelledby={titleId}
-            aria-describedby={descriptionId}
-            checked={checkForUpdates}
-            onCheckedChange={(enabled) => {
-              setError(null);
-              void runAction(() =>
-                settingsApi.update({ checkForUpdates: enabled }),
-              ).then(setError);
             }}
           />
         )}

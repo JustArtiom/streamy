@@ -3,7 +3,6 @@ import { EmptyState } from "@/components/home/empty-state";
 import { RecentList } from "@/components/home/recent-list";
 import { Page } from "@/components/layout/page";
 import { AddTorrentBox } from "@/components/torrent/add-torrent-box";
-import { VersionFooter } from "@/components/version-footer";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -15,25 +14,22 @@ export function HomePage() {
   useDocumentTitle(null);
 
   return (
-    <>
-      <Page className="gap-12 pt-16">
-        <section className="mx-auto flex w-full max-w-2xl flex-col items-center gap-7 text-center">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              What do you want to watch?
-            </h1>
-            <p className="text-muted-foreground">
-              Paste a magnet link or open a .torrent file. Streamy starts
-              playing while it downloads.
-            </p>
-          </div>
-          <AddTorrentBox />
-        </section>
+    <Page className="gap-12 pt-16">
+      <section className="mx-auto flex w-full max-w-2xl flex-col items-center gap-7 text-center">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            What do you want to watch?
+          </h1>
+          <p className="text-muted-foreground">
+            Paste a magnet link or open a .torrent file. Streamy starts playing
+            while it downloads.
+          </p>
+        </div>
+        <AddTorrentBox />
+      </section>
 
-        <Library />
-      </Page>
-      <VersionFooter />
-    </>
+      <Library />
+    </Page>
   );
 }
 

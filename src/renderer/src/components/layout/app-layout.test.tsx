@@ -1,4 +1,10 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { closeSettings } from "@/lib/settings";
 import { engineError, mockEngine } from "@/test/engine";
@@ -25,13 +31,29 @@ function sintelEngine() {
 }
 
 describe("the title bar's Back button", () => {
-  it("isn't there on Home", () => {
+  it("is always there, greyed out on Home with nothing before it", () => {
     sintelEngine();
     renderApp();
 
+    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Forward" })).toBeDisabled();
+  });
+
+  it("sits left, with the logo in the middle and Settings right", () => {
+    sintelEngine();
+    renderApp();
+
+    const bar = screen.getByRole("banner");
     expect(
-      screen.queryByRole("button", { name: "Back" }),
-    ).not.toBeInTheDocument();
+      within(bar)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Back", "Forward", "Settings"]);
+    // The logo doesn't catch clicks: the bar under it drags the window.
+    expect(within(bar).getByText("Streamy").parentElement).toHaveClass(
+      "pointer-events-none",
+      "justify-center",
+    );
   });
 
   it("goes back like a browser", async () => {
@@ -73,6 +95,57 @@ describe("the title bar's Back button", () => {
     expect(screen.getByRole("button", { name: "Back" })).toHaveClass(
       "no-drag-region",
     );
+    expect(screen.getByRole("button", { name: "Forward" })).toHaveClass(
+      "no-drag-region",
+    );
+  });
+});
+
+describe("the title bar's Forward button", () => {
+  it("goes forward again after going back", async () => {
+    sintelEngine();
+    const { router, user } = renderApp();
+    await act(() => router.navigate(`/torrent/${HASH}`));
+    const forward = screen.getByRole("button", { name: "Forward" });
+    expect(forward).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(router.state.location.pathname).toBe("/");
+    await waitFor(() => {
+      expect(forward).toBeEnabled();
+    });
+
+    await user.click(forward);
+    expect(router.state.location.pathname).toBe(`/torrent/${HASH}`);
+    await waitFor(() => {
+      expect(forward).toBeDisabled();
+    });
+  });
+
+  it("forgets the way forward once you go somewhere new", async () => {
+    sintelEngine();
+    const { router, user } = renderApp();
+    await act(() => router.navigate(`/torrent/${HASH}`));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Forward" })).toBeEnabled();
+    });
+
+    await act(() => router.navigate("/somewhere-else"));
+
+    expect(screen.getByRole("button", { name: "Forward" })).toBeDisabled();
+  });
+
+  it("works with ⌘] too", async () => {
+    sintelEngine();
+    const { router, user } = renderApp();
+    await act(() => router.navigate(`/torrent/${HASH}`));
+    await user.keyboard("{Meta>}[[{/Meta}");
+    expect(router.state.location.pathname).toBe("/");
+
+    await user.keyboard("{Meta>}]{/Meta}");
+
+    expect(router.state.location.pathname).toBe(`/torrent/${HASH}`);
   });
 });
 
@@ -95,6 +168,21 @@ describe("the mouse's back button", () => {
 
     fireEvent.mouseUp(screen.getByRole("main"), { button: 0 });
     fireEvent.mouseUp(screen.getByRole("main"), { button: 1 });
+    fireEvent.mouseUp(screen.getByRole("main"), { button: 2 });
+
+    expect(router.state.location.pathname).toBe(`/torrent/${HASH}`);
+  });
+
+  it("goes forward with the mouse's forward button", async () => {
+    sintelEngine();
+    const { router } = renderApp();
+    await act(() => router.navigate(`/torrent/${HASH}`));
+    fireEvent.mouseUp(screen.getByRole("main"), { button: 3 });
+    expect(router.state.location.pathname).toBe("/");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Forward" })).toBeEnabled();
+    });
+
     fireEvent.mouseUp(screen.getByRole("main"), { button: 4 });
 
     expect(router.state.location.pathname).toBe(`/torrent/${HASH}`);

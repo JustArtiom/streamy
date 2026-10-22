@@ -2,24 +2,14 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateStatus } from "../../../../shared/api";
-import type { Health } from "../../../../shared/engine-api";
-import { AdvancedSection } from "@/components/settings/advanced-section";
+import { AboutSection } from "@/components/settings/about-section";
 import { fakeStreamy, INITIAL_SNAPSHOT } from "@/test/fake-streamy";
 
-// The parts of Settings → Advanced about Streamy itself: its version, updates
-// and third-party licences. (The engine rows are tested in
-// settings-dialog.test.tsx.)
+// Settings → About: Streamy's version, updates and third-party licences.
 
 const { api } = fakeStreamy;
 
 const NOTICES_URL = "app://streamy/third-party-notices.txt";
-const HEALTH: Health = {
-  version: "0.1.0",
-  uptime: 5,
-  ffmpeg: { version: "8.1.3-Jellyfin", error: null },
-  encoder: null,
-  lowDiskSpace: false,
-};
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -33,7 +23,7 @@ beforeEach(() => {
     Promise.resolve(
       urlOf(input) === NOTICES_URL
         ? new Response("THIRD-PARTY NOTICES FOR STREAMY 0.1.0\n\nreact 19.3.1")
-        : Response.json(HEALTH),
+        : new Response(null, { status: 404 }),
     ),
   );
   vi.stubGlobal("fetch", fetchMock);
@@ -45,7 +35,7 @@ afterEach(() => {
 
 function renderSection(snapshot = INITIAL_SNAPSHOT) {
   const user = userEvent.setup();
-  render(<AdvancedSection snapshot={snapshot} />);
+  render(<AboutSection snapshot={snapshot} />);
   return { user };
 }
 
@@ -75,6 +65,20 @@ describe("version and updates", () => {
     ).toBeInTheDocument();
   });
 
+  it("turns automatic checks off, right next to the version", async () => {
+    const { user } = renderSection();
+    const autoCheck = screen.getByRole("switch", {
+      name: "Check for updates automatically",
+    });
+    expect(autoCheck).toBeChecked();
+
+    await user.click(autoCheck);
+
+    expect(api.settings.update).toHaveBeenCalledWith({
+      checkForUpdates: false,
+    });
+  });
+
   it("doesn't claim to check by itself when that's turned off", async () => {
     renderSection({
       ...INITIAL_SNAPSHOT,
@@ -87,6 +91,9 @@ describe("version and updates", () => {
     expect(
       screen.queryByText("Streamy checks for updates by itself."),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "Check for updates automatically" }),
+    ).not.toBeChecked();
     // Checking by hand still works.
     expect(
       screen.getByRole("button", { name: "Check for updates" }),
@@ -197,6 +204,16 @@ describe("version and updates", () => {
   });
 });
 
+describe("built with", () => {
+  it("lists the Electron, Chromium and Node versions", () => {
+    renderSection();
+
+    expect(
+      screen.getByText("Electron 45.0.0 · Chromium 156.0.0.0 · Node 24.0.0"),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("third-party licences", () => {
   it("shows the licences shipped with the app", async () => {
     const { user } = renderSection();
@@ -219,12 +236,8 @@ describe("third-party licences", () => {
 
   it("says when the file is missing, and tries again next time", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    fetchMock.mockImplementation((input) =>
-      Promise.resolve(
-        urlOf(input) === NOTICES_URL
-          ? new Response(null, { status: 404 })
-          : Response.json(HEALTH),
-      ),
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(null, { status: 404 })),
     );
     const { user } = renderSection();
     const view = () =>

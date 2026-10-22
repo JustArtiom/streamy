@@ -1,5 +1,4 @@
 import {
-  type HardwareEncoding,
   type SettingsSnapshot,
   type SettingsUpdate,
   SUBTITLES_OFF,
@@ -40,11 +39,6 @@ const COLOR_OPTIONS: { value: SubtitleColor; label: string }[] = [
   { value: "yellow", label: "Yellow" },
 ];
 
-const ENCODING_OPTIONS: { value: HardwareEncoding; label: string }[] = [
-  { value: "auto", label: "Automatic" },
-  { value: "off", label: "Off" },
-];
-
 function update(patch: SettingsUpdate) {
   settingsApi.update(patch).catch((error: unknown) => {
     console.error("Could not change the setting:", error);
@@ -58,7 +52,6 @@ export function PlaybackSection({ snapshot }: { snapshot: SettingsSnapshot }) {
     subtitleSize,
     subtitleBackground,
     subtitleColor,
-    hardwareEncoding,
   } = snapshot.settings;
 
   // The current choices always appear, even if they aren't in the list
@@ -174,21 +167,6 @@ export function PlaybackSection({ snapshot }: { snapshot: SettingsSnapshot }) {
             />
           </div>
         </div>
-      </SettingRow>
-
-      <SettingRow
-        title="Hardware video encoding"
-        description="When a video has to be converted to play, your graphics card does it faster. Turn it off if converted videos look glitchy."
-      >
-        <SegmentedControl
-          label="Hardware video encoding"
-          size="sm"
-          options={ENCODING_OPTIONS}
-          value={hardwareEncoding}
-          onChange={(next) => {
-            update({ hardwareEncoding: next });
-          }}
-        />
       </SettingRow>
     </>
   );
