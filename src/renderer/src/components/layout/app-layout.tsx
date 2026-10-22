@@ -8,7 +8,6 @@ import { IncomingLinks } from "@/components/layout/incoming-links";
 import { IpNoticeBanner } from "@/components/layout/ip-notice-banner";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TitleBar } from "@/components/title-bar";
-import { UpdateNotice } from "@/components/updates/update-notice";
 import { useMouseBackButton } from "@/hooks/use-mouse-back";
 import { cn } from "@/lib/cn";
 import { useWindowFullScreen } from "@/lib/full-screen";
@@ -63,7 +62,6 @@ export function AppLayout() {
         <TitleBar navigation={isHome ? undefined : <BackButton />} />
         <EngineBanner />
         <IpNoticeBanner />
-        <UpdateNotice />
       </div>
       <main
         ref={main}

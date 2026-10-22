@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { TITLE_BAR_HEIGHT } from "../../../shared/api";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { UpdateButton } from "@/components/updates/update-button";
 import { cn } from "@/lib/cn";
 import { useWindowFullScreen } from "@/lib/full-screen";
 import { isMac } from "@/lib/platform";
@@ -45,18 +46,22 @@ export function TitleBar({
           )}
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Settings"
-          title="Settings"
-          className="no-drag-region"
-          onClick={() => {
-            openSettings();
-          }}
-        >
-          <Settings />
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* Only there when an update is ready (or, on macOS, available). */}
+          <UpdateButton />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Settings"
+            title="Settings"
+            className="no-drag-region"
+            onClick={() => {
+              openSettings();
+            }}
+          >
+            <Settings />
+          </Button>
+        </div>
       </div>
     </header>
   );

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { UpdateStatus } from "../../../../shared/api";
 
 // Streamy's update status, as the main process reports it (src/main/updates).
-// One store for the window, so the notice under the title bar and Settings →
+// One store for the window, so the title bar's update button and Settings →
 // Advanced always say the same thing.
 
 type Listener = () => void;
@@ -46,35 +46,4 @@ export function useUpdateStatus(): UpdateStatus | null {
 /** Checks now (Settings → "Check for updates") and keeps the answer. */
 export async function checkForUpdates(): Promise<void> {
   set(await window.streamy.updates.check());
-}
-
-// The notice under the title bar (update-notice.tsx) can be dismissed for the
-// rest of the session: "ready 0.2.0", "available 0.2.0". A new version or a
-// new step shows it again.
-const dismissed = new Set<string>();
-const dismissedListeners = new Set<Listener>();
-
-function subscribeDismissed(listener: Listener): () => void {
-  dismissedListeners.add(listener);
-  return () => {
-    dismissedListeners.delete(listener);
-  };
-}
-
-export function dismissUpdateNotice(key: string): void {
-  dismissed.add(key);
-  for (const listener of dismissedListeners) listener();
-}
-
-export function useUpdateNoticeDismissed(key: string | null): boolean {
-  return useSyncExternalStore(
-    subscribeDismissed,
-    () => key !== null && dismissed.has(key),
-  );
-}
-
-/** Tests: forget dismissed notices, as if Streamy had just started. */
-export function resetUpdateNoticeForTests(): void {
-  dismissed.clear();
-  for (const listener of dismissedListeners) listener();
 }
